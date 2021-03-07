@@ -146,38 +146,51 @@
                                  :beg nil
                                  :end nil))))
 
+(defconst yaml--grammar-resolution-rules
+  '(("ns-plain" . literal)
+    ("ns-s-block-map-implicit-key" . list))
+  "Alist determining how to resolve grammar rule.")
+
 (defmacro yaml--frame (name rule)
   "Add a new state frame of NAME for RULE."
   (declare (indent defun))
-  `(progn
-     ;(message "%2d: %s" (length yaml-states) ,name)
-     (yaml--push-state ,name)
-     (when (not (member ,name yaml-tracing-ignore))
-       (message "|%s>%s %30s \"%s\""
-                (make-string (length yaml-states) ?-)
-                (make-string (- 30 (length yaml-states)) ?\s)
-                ,name
-                (replace-regexp-in-string
-                 "\n"
-                 "\\n"
-                 (substring yaml-parsing-input yaml-parsing-position)
-                 nil
-                 'literal)))
-     (let ((beg yaml-parsing-position)
-           (res ,rule))
-       (when (and res (not (member ,name yaml-tracing-ignore)))
-         (message "<%s|%s %30s \"%s\""
+  (let ((res-symbol (make-symbol "res")))
+    `(progn
+       ;;(message "%2d: %s" (length yaml-states) ,name)
+       (yaml--push-state ,name)
+       (when (not (member ,name yaml-tracing-ignore))
+         (message "|%s>%s %30s \"%s\""
                   (make-string (length yaml-states) ?-)
                   (make-string (- 30 (length yaml-states)) ?\s)
                   ,name
                   (replace-regexp-in-string
                    "\n"
                    "\\n"
-                   (substring yaml-parsing-input beg yaml-parsing-position)
+                   (substring yaml-parsing-input yaml-parsing-position)
                    nil
                    'literal)))
-       (yaml--pop-state)
-       res)))
+       (let ((beg yaml-parsing-position)
+             (,res-symbol ,rule))
+         (when (and ,res-symbol (not (member ,name yaml-tracing-ignore)))
+           (message "<%s|%s %30s \"%s\" = %s"
+                    (make-string (length yaml-states) ?-)
+                    (make-string (- 30 (length yaml-states)) ?\s)
+                    ,name
+                    (replace-regexp-in-string
+                     "\n"
+                     "\\n"
+                     (substring yaml-parsing-input beg yaml-parsing-position)
+                     nil
+                     'literal)
+                    ,res-symbol))
+         (yaml--pop-state)
+         (if (not ,res-symbol)
+             nil
+           (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules))))
+             (cond
+              ((equal res-type 'list) (list ,name ,res-symbol))
+              ((equal res-type 'literal) (substring yaml-parsing-input beg yaml-parsing-position))
+              (t ,res-symbol))))))))
 
 (defun yaml--end-of-stream ()
   ""
@@ -216,21 +229,35 @@
     (setq yaml-parsing-position (1+ yaml-parsing-position))
     t))
 
-(defmacro yaml--all (&rest forms)
-  "Pass if all of FORMS pass."
-  (if (= 1 (length forms))
-      (car forms)
-    (let ((idx-sym (make-symbol "idx")))
-      `(let ((,idx-sym ,(car forms)))
-         (and ,idx-sym (yaml--all ,@(cdr forms)))))))
+(defun yaml--run-all (&rest funcs)
+  "Return list of all evaluated FUNCS if all of FUNCS pass."
+  (let* ((start-pos yaml-parsing-position)
+         (ress '())
+         (res (catch 'break
+                (while funcs
+                  (let ((res (funcall (car funcs))))
+                    (when (not res)
+                      (throw 'break nil))
+                    (setq ress (append ress (list res)))
+                    (setq funcs (cdr funcs))))
+                ress)))
+    (unless res
+      (setq yaml-parsing-position start-pos))
+    res))
 
+(defmacro yaml--all (&rest forms)
+  "Pass and return all forms if all of FORMS pass."
+  `(yaml--run-all
+    ,@(mapcar (lambda (form)
+                `(lambda () ,form))
+             forms)))
 
 (defmacro yaml--any (&rest forms)
   "Pass if any of FORMS pass."
   (if (= 1 (length forms))
       (car forms)
     (let ((idx-sym (make-symbol "idx"))
-          (start-pos-sym (make-symbol "idx")))
+          (start-pos-sym (make-symbol "start")))
       `(let ((,start-pos-sym yaml-parsing-position)
              (,idx-sym ,(car forms)))
          (or ,idx-sym
@@ -250,7 +277,7 @@
 
 (defun yaml--empty ()
   "Return non-nil."
-  t)
+  'empty)
 
 (defun yaml--match ()
   ""
@@ -322,7 +349,8 @@
   "Repeat FUNC between MIN and MAX times."
   (if (and max (< max 0))
       nil
-    (let* ((count 0)
+    (let* ((res-list '())
+           (count 0)
            (pos yaml-parsing-position)
            (pos-start pos))
       (catch 'break
@@ -331,13 +359,16 @@
             (when (or (not res)
                       (= yaml-parsing-position pos))
               (throw 'break nil))
+            (setq res-list (cons res res-list))
             (setq count (1+ count))
             (setq pos yaml-parsing-position))))
       (if (and (>= count min)
                (or (not max) (<= count max)))
           (progn
             (setq yaml-parsing-position pos)
-            t)
+            (if (zerop count)
+                t
+              res-list))
         (setq yaml-parsing-position pos-start)
         nil))))
 
@@ -966,14 +997,14 @@
 (defun yaml-l-yaml-stream ()
   "Documentation string."
   (yaml--frame "l-yaml-stream"
-               (yaml--all (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
-                          (yaml--rep 0 1 (lambda () (yaml-l-any-document)))
-                          (yaml--rep2 0 nil (lambda ()
-                                              (yaml--any (yaml--all (yaml--rep 1 nil (lambda () (yaml-l-document-suffix)))
-                                                                    (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
-                                                                    (yaml--rep 0 1 (lambda () (yaml-l-any-document))))
-                                                         (yaml--all (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
-                                                                    (yaml--rep 0 1 (lambda () (yaml-l-explicit-document))))))))))
+    (yaml--all (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
+               (yaml--rep 0 1 (lambda () (yaml-l-any-document)))
+               (yaml--rep2 0 nil (lambda ()
+                                   (yaml--any (yaml--all (yaml--rep 1 nil (lambda () (yaml-l-document-suffix)))
+                                                         (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
+                                                         (yaml--rep 0 1 (lambda () (yaml-l-any-document))))
+                                              (yaml--all (yaml--rep2 0 nil (lambda () (yaml-l-document-prefix)))
+                                                         (yaml--rep 0 1 (lambda () (yaml-l-explicit-document))))))))))
 
 (defun yaml-nb-double-one-line ()
   "Documentation string."
@@ -1709,7 +1740,7 @@
 
 (defun yaml-l+block-mapping (n)
   "Documentation string."
-  (yaml--frame "l+block-mapping"
+  (yaml--frame  "l+block-mapping"
     (yaml--all (yaml--set m (yaml--auto-detect-indent n))
                (yaml--rep 1 nil (lambda () (yaml--all (yaml-s-indent (+ n (yaml--state-m)))
                                                       (yaml-ns-l-block-map-entry (+ n (yaml--state-m)))))))))
