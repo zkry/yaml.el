@@ -152,6 +152,20 @@
 
 ;; Receiver Functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defvar yaml--document-start-version nil)
+(defvar yaml--document-start-explicit nil)
+(defvar yaml--document-end-explicit nil)
+(defvar yaml--tag-map nil)
+(defvar yaml--tag-handle nil)
+(defvar yaml--anchor nil)
+(defvar yaml--document-end nil)
+
+(defvar yaml--cache nil)
+(defvar yaml--object-stack nil)
+(defvar yaml--state-stack nil
+  "The state that the YAML parser is with regards to incoming events.")
+(defvar yaml--root nil)
+
 (defun yaml--add-event (e)
   "Add event E."
   (message "Adding event: %s" e))
@@ -164,29 +178,52 @@
   "Create the data for a stream-end event."
   '(:stream-end))
 
-(defun yaml--document-start-event (explicit))
-(defun yaml--document-end-event (explicit))
+(defun yaml--document-start-event (explicit)
+  '(:document-start))
+(defun yaml--document-end-event (explicit)
+  '(:document-end))
 
-(defun yaml--mapping-start-event (flow))
-(defun yaml--mapping-end-event ())
+(defun yaml--mapping-start-event (flow)
+  (push :mapping yaml--state-stack)
+  (push (make-hash-table) yaml--object-stack)
+  '(:mapping-start))
 
-(defun yaml--sequence-start-event (flow))
-(defun yaml--sequence-end-event ())
+(defun yaml--mapping-end-event ()
+  (pop yaml--state-stack)
+  (let ((obj (pop yaml--object-stack)))
+    ;; TODO: Perhaps separate the logic here.
+    (yaml--scalar-event nil obj))
+  '(:mapping-end))
 
-(defun yaml--scalar-event (style value))
+(defun yaml--sequence-start-event (flow)
+  '(:sequence-start))
 
-(defun yaml--alias-event (name))
+(defun yaml--sequence-end-event ()
+  '(:sequence-end))
 
-(defun yaml--check-document-start ())
-(defun yaml--check-document-end ())
+(defun yaml--scalar-event (style value)
+  (let ((top-state (car yaml--state-stack)))
+    (cond
+     ((not top-state)
+      (setq yaml--root value))
+     ((equal top-state :mapping)
+      (progn
+        (push :mapping-value yaml--state-stack)
+        (push value yaml--cache)))
+     ((equal top-state :mapping-value)
+      (progn
+        (let ((key (pop yaml--cache))
+              (table (car yaml--object-stack)))
+          (puthash key value table))
+        (pop yaml--state-stack)))
+     ((equal top-state nil))))
+  '(:scalar))
 
-(defvar yaml--document-start-version nil)
-(defvar yaml--document-start-explicit nil)
-(defvar yaml--document-end-explicit nil)
-(defvar yaml--tag-map nil)
-(defvar yaml--tag-handle nil)
-(defvar yaml--anchor nil)
-(defvar yaml--document-end nil)
+(defun yaml--alias-event (name)
+  '(:alias))
+
+(defun yaml--check-document-start () t)
+(defun yaml--check-document-end () t)
 
 (defconst yaml--grammar-events-in
   '(("l-yaml-stream" . (lambda ()
@@ -194,14 +231,14 @@
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
                          (setq yaml--tag-map (make-hash-table))
-                         (yaml--add-event (yaml--document-start-event false))))
+                         (yaml--add-event (yaml--document-start-event nil))))
     ("c-flow-mapping" . (lambda ()
                           (yaml--add-event (yaml--mapping-start-event t))))
     ("c-flow-sequence" . (lambda ()
                            (yaml--add-event (yaml--sequence-start-event nil))))
-    ("l-block-mapping" . (lambda ()
+    ("l+block-mapping" . (lambda ()
                            (yaml--add-event (yaml--mapping-start-event nil))))
-    ("l-block-sequence" . (lambda ()
+    ("l+block-sequence" . (lambda ()
                             (yaml--add-event (yaml--sequence-start-event nil))))
     ("ns-l-compact-mapping" . (lambda ()
                                 (yaml--add-event (yaml--mapping-start-event))))
@@ -212,7 +249,7 @@
 
 (defconst yaml--grammar-events-out
   '(("l-yaml-stream" . (lambda (text)
-                         (check-document-end)
+                         (yaml--check-document-end)
                          (yaml--add-event (yaml--stream-end-event))))
     ("ns-yaml-version" . (lambda (text)
                            (when yaml--document-start-version
@@ -339,10 +376,11 @@
     ("c-ns-alias-node" . (lambda (text)
                            (yaml--add-event (yaml--alias-event (substring text 1)))))))
 
-(defun yaml--event-walker (tree)
+(defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
+  ;;(message ">>> %s" tree)
   (when (consp tree)
-    (if (not (equal (car tree) t))
+    (if (stringp (car tree))
         (let ((grammar-rule (car tree))
               (text (cadr tree))
               (children (caddr tree)))
@@ -350,11 +388,11 @@
                 (out-fn (cdr (assoc grammar-rule yaml--grammar-events-out))))
             (when in-fn
               (funcall in-fn))
-            (yaml--event-walker children)
+            (yaml--walk-events children)
             (when out-fn
               (funcall out-fn text))))
-      (yaml--event-walker (car tree))
-      (yaml--event-walker (cdr tree)))))
+      (yaml--walk-events (car tree))
+      (yaml--walk-events (cdr tree)))))
 
 
 (defmacro yaml--frame (name rule)
@@ -619,13 +657,18 @@
 
 (defun yaml-parse-string (str)
   "Parse STR as YAML."
+  (setq yaml--cache nil)
+  (setq yaml--object-stack nil)
+  (setq yaml--state-stack nil)
+  (setq yaml--root nil)
   (let ((res (yaml-parse str
                (yaml--top))))
     (when (< yaml-parsing-position (length yaml-parsing-input))
       (error (format "parser finished before end of input %s/%s"
                      yaml-parsing-position
-                     (length yaml-parsing-input)) ))
-    res))
+                     (length yaml-parsing-input))))
+    (message "Parsed data: %s" res)
+    (yaml--walk-events res)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
