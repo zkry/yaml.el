@@ -185,7 +185,7 @@
 
 (defun yaml--mapping-start-event (flow)
   (push :mapping yaml--state-stack)
-  (push (make-hash-table) yaml--object-stack)
+  (push (make-hash-table :test 'equal) yaml--object-stack)
   '(:mapping-start))
 
 (defun yaml--mapping-end-event ()
@@ -196,9 +196,14 @@
   '(:mapping-end))
 
 (defun yaml--sequence-start-event (flow)
+  (push :sequence yaml--state-stack)
+  (push nil yaml--object-stack)
   '(:sequence-start))
 
 (defun yaml--sequence-end-event ()
+  (pop yaml--state-stack)
+  (let ((obj (pop yaml--object-stack)))
+    (yaml--scalar-event nil obj))
   '(:sequence-end))
 
 (defun yaml--scalar-event (style value)
@@ -206,6 +211,9 @@
     (cond
      ((not top-state)
       (setq yaml--root value))
+     ((equal top-state :sequence)
+      (let ((l (car yaml--object-stack)))
+        (setcar yaml--object-stack (append l (list value)))))
      ((equal top-state :mapping)
       (progn
         (push :mapping-value yaml--state-stack)
@@ -273,11 +281,11 @@
     ("l+block-mapping" . (lambda (text)
                            (yaml--add-event (yaml--mapping-end-event))))
     ("l+block-sequence" . (lambda (text)
-                            (yaml--add-event (yaml--sequence-end-event nil))))
+                            (yaml--add-event (yaml--sequence-end-event))))
     ("ns-l-compact-mapping" . (lambda (text)
                                 (yaml--add-event (yaml--mapping-end-event))))
     ("ns-l-compact-sequence" . (lambda (text)
-                                 (yaml--add-event (yaml--sequence-end-event nil))))
+                                 (yaml--add-event (yaml--sequence-end-event))))
     ("ns-flow-pair" . (lambda (text)
                         (yaml--add-event (yaml--mapping-end-event))))
     ("ns-plain" . (lambda (text)
@@ -360,7 +368,8 @@
                                   (replaced (replace-regexp-in-string
                                              "\\\\\\\\"
                                              "\\"
-                                             replaced)))
+                                             replaced))
+                                  (replaced (substring replaced 1 (1- (length replaced)))))
                              (yaml--add-event (yaml--scalar-event "double" replaced)))))
     ("c-l+literal" . (lambda (text)
                        ;; TODO
@@ -403,9 +412,9 @@
        ;;(message "%2d: %s" (length yaml-states) ,name)
        (yaml--push-state ,name)
        (when (not (member ,name yaml-tracing-ignore))
-         (message "|%s>%s %30s \"%s\""
+         (message "|%s>%s %40s \"%s\""
                   (make-string (length yaml-states) ?-)
-                  (make-string (- 30 (length yaml-states)) ?\s)
+                  (make-string (- 40 (length yaml-states)) ?\s)
                   ,name
                   (replace-regexp-in-string
                    "\n"
@@ -416,9 +425,9 @@
        (let ((beg yaml-parsing-position)
              (,res-symbol ,rule))
          (when (and ,res-symbol (not (member ,name yaml-tracing-ignore)))
-           (message "<%s|%s %30s \"%s\" = %s"
+           (message "<%s|%s %40s \"%s\" = %s"
                     (make-string (length yaml-states) ?-)
-                    (make-string (- 30 (length yaml-states)) ?\s)
+                    (make-string (- 40 (length yaml-states)) ?\s)
                     ,name
                     (replace-regexp-in-string
                      "\n"
@@ -668,7 +677,8 @@
                      yaml-parsing-position
                      (length yaml-parsing-input))))
     (message "Parsed data: %s" res)
-    (yaml--walk-events res)))
+    (yaml--walk-events res)
+    yaml--root))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -1420,7 +1430,7 @@
 (defun yaml-c-ns-flow-pair-json-key-entry (n c)
   "Documentation string."
   (yaml--frame "c-ns-flow-pair-json-key-entry"
-    (yaml--all (yaml-c-s-implicit-json-key (yaml-flow-key))
+    (yaml--all (yaml-c-s-implicit-json-key "flow-key")
                (yaml-c-ns-flow-map-adjacent-value n c))))
 
 (defun yaml-l-literal-content (n t)
@@ -1620,7 +1630,7 @@
 (defun yaml-ns-flow-pair-yaml-key-entry (n c)
   "Documentation string."
   (yaml--frame "ns-flow-pair-yaml-key-entry"
-    (yaml--all (yaml-ns-s-implicit-yaml-key (yaml-flow-key))
+    (yaml--all (yaml-ns-s-implicit-yaml-key "flow-key")
                (yaml-c-ns-flow-map-separate-value n c))))
 
 (defun yaml-e-scalar ()
