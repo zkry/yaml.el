@@ -233,6 +233,9 @@
 (defun yaml--check-document-start () t)
 (defun yaml--check-document-end () t)
 
+(defun yaml--revers-at-list ()
+  (setcar yaml--object-stack (reverse (car yaml--object-stack))))
+
 (defconst yaml--grammar-events-in
   '(("l-yaml-stream" . (lambda ()
                          (yaml--add-event (yaml--stream-start-event))
@@ -275,12 +278,13 @@
                             (setq yaml--document-end-explicit t))
                           (yaml--check-document-end)))
     ("c-flow-mapping" . (lambda (text)
-                          (yaml--add-event (yaml--mapping-end-event t))))
+                          (yaml--add-event (yaml--mapping-end-event))))
     ("c-flow-sequence" . (lambda (text)
                            (yaml--add-event (yaml--sequence-end-event ))))
     ("l+block-mapping" . (lambda (text)
                            (yaml--add-event (yaml--mapping-end-event))))
     ("l+block-sequence" . (lambda (text)
+                            (yaml--revers-at-list)
                             (yaml--add-event (yaml--sequence-end-event))))
     ("ns-l-compact-mapping" . (lambda (text)
                                 (yaml--add-event (yaml--mapping-end-event))))
@@ -381,7 +385,8 @@
     ("c-ns-anchor-property" . (lambda (text)
                                 (setq yaml--anchor (substring text 1))))
     ("c-ns-tag-property" . (lambda (text)
-                             (error "not implemented")))
+                             ;; (error "not implemented: %s" text)
+                             ))
     ("c-ns-alias-node" . (lambda (text)
                            (yaml--add-event (yaml--alias-event (substring text 1)))))))
 

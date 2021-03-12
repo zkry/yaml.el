@@ -270,11 +270,26 @@
 (ert-deftest yaml-parsing-yaml ()
   "Tests YAML parsing."
   (should (yaml--hash-table-equal
+           (yaml-parse-string "key: value")
            (let ((ht (make-hash-table :test 'equal)))
-             (puthash "test" 3 ht))
-           (yaml-parse-string "key: value"))))
-(yaml-parse-string "value")
+             (prog1 ht
+               (puthash "key" "value" ht)))))
+  (should (equal (yaml-parse-string "value")
+                 "value"))
+  (should (equal (yaml-parse-string "[abc, def, ghi]")
+                 '("abc" "def" "ghi")))
+  (should (equal (yaml-parse-string "- abc\n- def\n- ghi")
+                 '("abc" "def" "ghi")))
+  (should (equal (yaml-parse-string "- abc\n- def\n- ghi")
+                 '("abc" "def" "ghi")))
+  (should (equal (yaml-parse-string "- [abc, def, ghi]\n- [jkl, mno, pqr]\n- [stu, vwx, yz]")
+                 '(("abc" "def" "ghi") ("jkl" "mno" "pqr") ("stu" "vwx" "yz"))))
+;;   (should (equal (yaml-parse-string "%YAML 1.2
+;; ---
+;; !!map {
+;;   ? !!str foo : !!seq [ !!str \"abc\", !!str \"def\"],
+;;   ? !!str xzy : !!str zyx
+;; }")))
+  )
 
 (provide 'yaml-tests)
-
-;;; yaml-tests.el ends here
