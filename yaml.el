@@ -50,6 +50,11 @@
 (defvar yaml-parsing-position 0)
 (defvar yaml-states nil)
 
+(defvar yaml--parsing-object-type nil)
+(defvar yaml--parsing-sequence-type nil)
+(defvar yaml--parsing-null-object nil)
+(defvar yaml--parsing-false-object nil)
+
 (cl-defstruct (yaml-state (:constructor yaml-state-create)
                           (:copier nil))
   doc tt m name lvl beg end)
@@ -166,6 +171,80 @@
   "The state that the YAML parser is with regards to incoming events.")
 (defvar yaml--root nil)
 
+(defun yaml--resolve-scalar-tag (scalar)
+  (cond
+   ;; tag:yaml.org,2002:null
+   ((or (equal "null" scalar)
+        (equal "Null" scalar)
+        (equal "NULL" scalar)
+        (equal "~" scalar))
+    yaml--parsing-null-object)
+   ;; tag:yaml.org,2002:bool
+   ((or (equal "true" scalar)
+        (equal "True" scalar)
+        (equal "TRUE" scalar)) t)
+   ((or (equal "false" scalar)
+        (equal "False" scalar)
+        (equal "FALSE" scalar))
+    yaml--parsing-false-object)
+   ;; tag:yaml.org,2002:int
+   ((string-match "^0$\\|^-?[1-9][0-9]*$" scalar)
+    (string-to-number scalar))
+   ((string-match "^[-+]?[0-9]+$" scalar)
+    (string-to-number scalar))
+   ((string-match "^0o[0-7]+$" scalar)
+    (string-to-number scalar 8))
+   ((string-match "^0x[0-9a-fA-F]+$" scalar)
+    (string-to-number scalar 16))
+   ;; tag:yaml.org,2002:float
+   ((string-match "^[-+]?\\(\\.[0-9]+\\|[0-9]+\\(\\.[0-9]*\\)?\\)\\([eE][-+]?[0-9]+\\)?$" scalar)
+    (string-to-number scalar 10))
+   ((string-match "^[-+]?\\(\\.inf\\|\\.Inf\\|\\.INF\\)$" scalar)
+    1.0e+INF)
+   ((string-match "^[-+]?\\(\\.nan\\|\\.NaN\\|\\.NAN\\)$" scalar)
+    1.0e+INF)
+   ((string-match "^0$\\|^-?[1-9]\\(\\.[0-9]*\\)?\\(e[-+][1-9][0-9]*\\)?$" scalar)
+    (string-to-number scalar))
+   (t scalar)))
+
+(defun yaml--hash-table-to-alist (hash-table)
+  "Convert HASH-TABLE to a alist."
+  (let ((alist nil))
+    (maphash
+     (lambda (k v)
+       (setq alist (cons (cons k v) alist)))
+     hash-table)
+    alist))
+
+(defun yaml--hash-table-to-plist (hash-table)
+  "Convert HASH-TABLE to a plist."
+  (let ((plist nil))
+    (maphash
+     (lambda (k v)
+       (setq plist (cons k (cons v plist))))
+     hash-table)
+    plist))
+
+(defun yaml--format-object (hash-table)
+  "Convert HASH-TABLE to alist of plist if specified."
+  (cond
+   ((equal yaml--parsing-object-type 'hash-table)
+    hash-table)
+   ((equal yaml--parsing-object-type 'alist)
+    (yaml--hash-table-to-alist hash-table))
+   ((equal yaml--parsing-object-type 'plist)
+    (yaml--hash-table-to-plist hash-table))
+   (t hash-table)))
+
+(defun yaml--format-list (l)
+  "Convert HASH-TABLE to alist of plist if specified."
+  (cond
+   ((equal yaml--parsing-sequence-type 'list)
+    l)
+   ((equal yaml--parsing-sequence-type 'array)
+    (apply #'vector l))
+   (t l)))
+
 (defun yaml--add-event (e)
   "Add event E."
   (message "Adding event: %s" e))
@@ -207,7 +286,11 @@
   '(:sequence-end))
 
 (defun yaml--scalar-event (style value)
-  (let ((top-state (car yaml--state-stack)))
+  (let ((top-state (car yaml--state-stack))
+        (value (cond
+                ((stringp value) (yaml--resolve-scalar-tag value))
+                ((listp value) (yaml--format-list value))
+                ((hash-table-p value) (yaml--format-object value)))))
     (cond
      ((not top-state)
       (setq yaml--root value))
@@ -252,7 +335,7 @@
     ("l+block-sequence" . (lambda ()
                             (yaml--add-event (yaml--sequence-start-event nil))))
     ("ns-l-compact-mapping" . (lambda ()
-                                (yaml--add-event (yaml--mapping-start-event))))
+                                (yaml--add-event (yaml--mapping-start-event nil))))
     ("ns-l-compact-sequence" . (lambda ()
                                  (yaml--add-event (yaml--sequence-start-event nil))))
     ("ns-flow-pair" . (lambda ()
@@ -684,6 +767,57 @@
     (message "Parsed data: %s" res)
     (yaml--walk-events res)
     yaml--root))
+
+(defun yaml-parse-string (string &rest args)
+  "Parse the YAML value in STRING.  Keyword ARGS are as follows:
+
+OBJECT-TYPE specifies the Lisp object to use for representing
+key-value YAML mappings.  Possible values for OBJECT-TYPE are
+the symbols hash-table, alist, and plist.
+
+SEQUENCE-TYPE specifies the Lisp object to use for representing YAML
+sequences.   Possible values for SEQUENCE-TYPE are the symbols list, and array.
+
+NULL-OBJECT contains the object used to represent the null value.
+It defaults to the symbol :null.
+
+FALSE-OBJECT contains the object used to represent the false
+value.  It defaults to the symbol :false."
+  (setq yaml--cache nil)
+  (setq yaml--object-stack nil)
+  (setq yaml--state-stack nil)
+  (setq yaml--root nil)
+  (let ((object-type (plist-get args :object-type))
+        (sequence-type (plist-get args :sequence-type))
+        (null-object (plist-get args :null-object))
+        (false-object (plist-get args :false-object)))
+    (cond
+     ((or (not object-type)
+          (equal object-type 'hash-table))
+      (setq yaml--parsing-object-type 'hash-table))
+     ((equal 'alist object-type)
+      (setq yaml--parsing-object-type 'alist))
+     ((equal 'plist object-type)
+      (setq yaml--parsing-object-type 'plist))
+     (t (error "Invalid object-type.  object-type must be hash-table, alist, or plist")))
+    (cond
+     ((or (not sequence-type)
+          (equal sequence-type 'array))
+      (setq yaml--parsing-sequence-type 'array))
+     ((equal 'list sequence-type)
+      (setq yaml--parsing-sequence-type 'list))
+     (t (error "Invalid sequence-type.  sequence-type must be list or array")))
+    (setq yaml--parsing-null-object (or null-object :null))
+    (setq yaml--parsing-false-object (or false-object :false))
+    (let ((res (yaml-parse string
+                 (yaml--top))))
+      (when (< yaml-parsing-position (length yaml-parsing-input))
+        (error (format "parser finished before end of input %s/%s"
+                       yaml-parsing-position
+                       (length yaml-parsing-input))))
+      (message "Parsed data: %s" res)
+      (yaml--walk-events res)
+      yaml--root)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
