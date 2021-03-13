@@ -1,12 +1,14 @@
 #!/usr/bin/env bb
 
 (def package-prefix "yaml")
+(def fn-name "yaml--parse-from-grammar")
 
 (defn prefix-package-symbol [name]
-  (symbol (str package-prefix "-" name)))
+  (symbol (str "'" name)))
 
 (defn prefix-package-symbol-quoted [name]
-  (symbol (str "#'" package-prefix "-" name)))
+  (list 'lambda (list)
+        (list (symbol fn-name) (symbol (str "'" name)))))
 
 (defn extract-params
   "Extract the parameters of a rule and return them as a list of symbols."
@@ -37,11 +39,11 @@
         (= "(match)" var-name)
         (list 'yaml--match)
 
-        (#{"flow-out" "flow-in" "block-in" "block-out"} var-name)
+        (#{"in-flow" "flow-out" "flow-in" "block-key" "block-in" "block-out"} var-name)
         var-name
 
         (> (count var-name) 2)
-        (list (prefix-package-symbol var-name))
+        (list (symbol fn-name) (prefix-package-symbol var-name))
 
         (= "m" var-name)
         (list 'yaml--state-m)
@@ -50,6 +52,9 @@
         (list 'yaml--state-t)
 
         :else (symbol var-name)))
+
+(defmethod gen-elisp-fn-arg "clojure.lang.MapEntry" [var-name]
+  (list (symbol (first var-name)) (symbol (second var-name))))
 
 (defmethod gen-elisp-fn-arg "clojure.lang.PersistentArrayMap" [m]
   (cond
@@ -66,20 +71,23 @@
 
     :else
     (let [[f args] (first m)]
-      (concat (list (prefix-package-symbol f))
+      (concat (list (symbol fn-name) (prefix-package-symbol f))
               (map gen-elisp-fn-arg (flatten (list args)))))))
 
 (defmulti gen-elisp-parse-expr #(.getName (class %)))
 
 (defn gen-elsip-char-symbol [c]
-  (symbol (str "?\\"
-               (if (= c "N")
-                 "n"
-                 c))))
+  (cond
+    (re-matches #"[a-zA-Z]" c)
+    (symbol (str "?" c))
+    :else
+    (symbol (str "?\\" (if (= c "N") "n" c)))))
 
 (defmethod gen-elisp-parse-expr "java.lang.String" [chr]
   (cond (= "<start-of-line>" chr)
         (list 'yaml--start-of-line)
+        (#{"in-flow" "block-key" "flow-out" "flow-in" "block-in" "block-out"} chr)
+        chr
         (= "<end-of-stream>" chr)
         (list 'yaml--end-of-stream)
         (= "<empty>" chr)
@@ -89,7 +97,7 @@
         (= "N" chr)
         (list (prefix-package-symbol "\n"))
         :else
-        (list (prefix-package-symbol chr))))
+        (list (symbol fn-name) (prefix-package-symbol chr))))
 
 (defmethod gen-elisp-parse-expr "clojure.lang.PersistentVector" [[min max]]
   (list 'yaml--chr-range
@@ -159,12 +167,12 @@
       (list 'yaml--chk "<=" (gen-elisp-fn-arg expr)))
 
     (get m "(===)")
-    (let [[a b] (first (get m "(===)"))]
-      (list 'yaml--chk "=" (list (first (gen-elisp-fn-arg a)) (gen-elisp-fn-arg b))))
+    (let [x (get m "(===)")]
+      (list 'yaml--chk "=" (gen-elisp-fn-arg x)))
 
     (get m "(!==)")
-    (let [[a b] (first (get m "(!==)"))]
-      (list 'yaml--chk "!" (list (first (gen-elisp-fn-arg a)) (gen-elisp-fn-arg b))))
+    (let [x (get m "(!==)")]
+      (list 'yaml--chk "!" (gen-elisp-fn-arg x)))
 
     (get m "(max)")
     (list 'yaml--max (get m "(max)"))
@@ -189,15 +197,21 @@
     :else
     (let [[f args] (first m)]
       ;;(println "[debug-2]" (pr-str f) (pr-str args))
-      (concat (list (prefix-package-symbol f))
+      (concat (list (symbol fn-name) (prefix-package-symbol f))
               (map gen-elisp-fn-arg (flatten (list args)))))))
+
+(defn gen-elisp-arg-let [params body]
+  (list 'let (map-indexed (fn [idx param]
+                            (list param (list 'nth idx 'args)))
+                          params)
+        body))
 
 (defn gen-elisp-defun [[name rule]]
   (let [params (extract-params rule)
         rule (if (map? rule) (dissoc rule "(...)") rule)]
-    (list 'defun (prefix-package-symbol name) params
-          "Documentation string."
-          (list 'yaml--frame name (gen-elisp-parse-expr rule)))))
+    (list (list 'eq 'state (symbol (str "'" name)))
+          (gen-elisp-arg-let params
+                             (list 'yaml--frame name (gen-elisp-parse-expr rule))))))
 
 (def json-grammar (into {} (filter (fn [[k _]] (not (= ":" (subs k 0 1)))) (json/parse-string (slurp "./yaml-spec-1.2.json")))))
 

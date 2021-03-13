@@ -267,6 +267,20 @@
                h1)
       res)))
 
+(ert-deftest yaml-parsing-scalar ()
+  "Test conversion of !!str to JSON scalar"
+  (should (equal :null (yaml--resolve-scalar-tag "null")))
+  (should (equal :false (yaml--resolve-scalar-tag "false")))
+  (should (equal t (yaml--resolve-scalar-tag "true")))
+  (should (equal "xtruex" (yaml--resolve-scalar-tag "xtruex")))
+  (should (equal 0 (yaml--resolve-scalar-tag "0")))
+  (should (equal 10 (yaml--resolve-scalar-tag "10")))
+  (should (equal "x10" (yaml--resolve-scalar-tag "x10")))
+  (should (equal 10.52 (yaml--resolve-scalar-tag "10.52")))
+  (should (equal 52.0 (yaml--resolve-scalar-tag ".52e2")))
+  (should (equal 1.0e+INF (yaml--resolve-scalar-tag ".Inf")))
+  (should (equal "hello world" (yaml--resolve-scalar-tag "hello world"))))
+
 (ert-deftest yaml-parsing-yaml ()
   "Tests YAML parsing."
   (should (yaml--hash-table-equal
@@ -291,5 +305,22 @@
 ;;   ? !!str xzy : !!str zyx
 ;; }")))
   )
+
+;; (yaml-parse-string "apiVersion: v1
+;; description: A Helm chart for bidder canary
+;; home: https://github.com/travelaudience/bidder-bidder
+;; maintainers:
+;; - name: realtime-team
+;; name: rtb-canary
+;; version: 1.26.3
+;; ")
+
+(defun yaml-c-ns-flow-map-separate-value (n c)
+  "Documentation string."
+  (yaml--frame "c-ns-flow-map-separate-value"
+    (yaml--all (yaml--chr ?\:)
+               (yaml--chk "!" (ns-plain-safe c))
+               (yaml--any (yaml--all (yaml-s-separate n c) (yaml-ns-flow-node n c))
+                          (yaml-e-node)))))
 
 (provide 'yaml-tests)
