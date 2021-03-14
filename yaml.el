@@ -80,27 +80,34 @@ This flag is intended for development purposes.")
        :name nil :doc nil :lvl 0 :beg 0 :end 0 :m nil :tt nil)))
 
 (defun yaml-state-set-m (val)
-  "Set the current value of m to VAL."
-  (let* ((top-state (yaml--state-curr)))
-    (setcar yaml--states
-            (yaml-state-create :doc (yaml-state-doc top-state)
-                               :tt (yaml-state-tt top-state)
-                               :m val
-                               :name (yaml-state-name top-state)
-                               :lvl (yaml-state-lvl top-state)
-                               :beg (yaml-state-beg top-state)
-                               :end (yaml-state-end top-state)))))
+  "Set the current value of t to VAL."
+  (let* ((states yaml--states))
+    (while states
+      (let* ((top-state (car states))
+             (new-state (yaml-state-create :doc (yaml-state-doc top-state)
+                                           :tt (yaml-state-tt top-state)
+                                           :m val
+                                           :name (yaml-state-name top-state)
+                                           :lvl (yaml-state-lvl top-state)
+                                           :beg (yaml-state-beg top-state)
+                                           :end (yaml-state-end top-state))))
+        (setcar states new-state))
+      (setq states (cdr states)))))
+
 (defun yaml-state-set-t (val)
   "Set the current value of t to VAL."
-  (let* ((top-state (yaml--state-curr)))
-    (setcar yaml--states
-            (yaml-state-create :doc (yaml-state-doc top-state)
-                               :tt val
-                               :m (yaml-state-m top-state)
-                               :name (yaml-state-name top-state)
-                               :lvl (yaml-state-lvl top-state)
-                               :beg (yaml-state-beg top-state)
-                               :end (yaml-state-end top-state)))))
+  (let* ((states yaml--states))
+    (while states
+      (let* ((top-state (car states))
+             (new-state (yaml-state-create :doc (yaml-state-doc top-state)
+                                           :tt val
+                                           :m (yaml-state-m top-state)
+                                           :name (yaml-state-name top-state)
+                                           :lvl (yaml-state-lvl top-state)
+                                           :beg (yaml-state-beg top-state)
+                                           :end (yaml-state-end top-state))))
+        (setcar states new-state))
+      (setq states (cdr states)))))
 
 (defun yaml--state-doc ()
   "Return the doc property of current state."
@@ -643,7 +650,8 @@ This flag is intended for development purposes.")
             (let ((beg (yaml-state-beg top-state))
                   (end (yaml-state-end top-state)))
               (setq res (substring yaml--parsing-input beg end)))
-          (setq states (cdr states)))))))
+          (setq states (cdr states)))))
+    res))
 
 (defun yaml--auto-detect-indent (n)
   "Detect the indentation given N."
@@ -835,8 +843,10 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'c-indentation-indicator)
     (let ((m (nth 0 args)))
       (yaml--frame "c-indentation-indicator"
-        (yaml--any (yaml--set m (yaml--ord (lambda () (yaml--match))))
-                   (yaml--set m (yaml--parse-from-grammar 'auto-detect))))))
+        (yaml--any (when (yaml--parse-from-grammar 'ns-dec-digit)
+                     (yaml--set m (yaml--ord (lambda () (yaml--match)))) t)
+                   (when (yaml--empty)
+                     (yaml--set m (yaml--parse-from-grammar 'auto-detect)) t)))))
 
    ((eq state 'ns-reserved-directive)
     (let ()
@@ -927,12 +937,15 @@ Rules for this function are defined by the yaml-spec JSON file."
                    (yaml--chr ?\%)
                    (yaml--chr ?\@)
                    (yaml--chr ?\`)))))
+
    ((eq state 'c-l+literal)
     (let ((n (nth 0 args)))
       (yaml--frame "c-l+literal"
-        (yaml--all (yaml--chr ?\|)
-                   (yaml--parse-from-grammar 'c-b-block-header (yaml--state-m) (yaml--state-t))
-                   (yaml--parse-from-grammar 'l-literal-content (+ n (yaml--state-m)) (yaml--state-t))))))
+        (progn
+          (message "c-l+literal: %s" (yaml--state-t))
+          (yaml--all (yaml--chr ?\|)
+                     (yaml--parse-from-grammar 'c-b-block-header (yaml--state-m) (yaml--state-t))
+                     (yaml--parse-from-grammar 'l-literal-content (+ n (yaml--state-m)) (yaml--state-t)))))))
 
    ((eq state 'c-single-quoted)
     (let ((n (nth 0 args))
@@ -1035,7 +1048,6 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'ns-plain)
     (let ((n (nth 0 args))
           (c (nth 1 args)))
-      (message "DEBUG: %s %s" n c)
       (yaml--frame "ns-plain"
         (cond
          ((equal c "block-key") (yaml--parse-from-grammar 'ns-plain-one-line c))
@@ -1082,7 +1094,15 @@ Rules for this function are defined by the yaml-spec JSON file."
         (yaml--but (lambda () (yaml--parse-from-grammar 'ns-char))
                    (lambda () (yaml--parse-from-grammar 'c-flow-indicator))))))
 
-   ((eq state 's-l+block-scalar) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "s-l+block-scalar" (yaml--all (yaml--parse-from-grammar 's-separate (+ n 1) c) (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 'c-ns-properties (+ n 1) c) (yaml--parse-from-grammar 's-separate (+ n 1) c)))) (yaml--any (yaml--parse-from-grammar 'c-l+literal n) (yaml--parse-from-grammar 'c-l+folded n))))))
+   ((eq state 's-l+block-scalar)
+    (let ((n (nth 0 args)) (c (nth 1 args)))
+      (yaml--frame "s-l+block-scalar"
+        (yaml--all (yaml--parse-from-grammar 's-separate (+ n 1) c)
+                   (yaml--rep 0 1 (lambda ()
+                                    (yaml--all (yaml--parse-from-grammar 'c-ns-properties (+ n 1) c)
+                                               (yaml--parse-from-grammar 's-separate (+ n 1) c))))
+                   (yaml--any (yaml--parse-from-grammar 'c-l+literal n)
+                              (yaml--parse-from-grammar 'c-l+folded n))))))
 
    ((eq state 'ns-plain-safe-in)
     (let ()
@@ -1109,11 +1129,11 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'l-chomped-empty)
     (let ((n (nth 0 args))
-          (t (nth 1 args)))
+          (tt (nth 1 args)))
       (yaml--frame "l-chomped-empty"
-        (cond ((equal t "clip") (yaml--parse-from-grammar 'l-strip-empty n))
-              ((equal t "keep") (yaml--parse-from-grammar 'l-keep-empty n))
-              ((equal t "strip") (yaml--parse-from-grammar 'l-strip-empty n))))))
+        (cond ((equal tt "clip") (yaml--parse-from-grammar 'l-strip-empty n))
+              ((equal tt "keep") (yaml--parse-from-grammar 'l-keep-empty n))
+              ((equal tt "strip") (yaml--parse-from-grammar 'l-strip-empty n))))))
 
    ((eq state 'c-s-implicit-json-key)
     (let ((c (nth 0 args)))
@@ -1159,14 +1179,28 @@ Rules for this function are defined by the yaml-spec JSON file."
         (yaml--all (yaml--exclude "c-forbidden")
                    (yaml--parse-from-grammar 's-l+block-node -1 "block-in")))))
 
-   ((eq state 'b-chomped-last) (let ((t (nth 0 args))) (yaml--frame "b-chomped-last" (cond ((equal t "clip") (yaml--parse-from-grammar '(any) (yaml--parse-from-grammar 'b-as-line-feed) (yaml--parse-from-grammar '<end-of-stream>))) ((equal t "keep") (yaml--parse-from-grammar '(any) (yaml--parse-from-grammar 'b-as-line-feed) (yaml--parse-from-grammar '<end-of-stream>))) ((equal t "strip") (yaml--parse-from-grammar '(any) (yaml--parse-from-grammar 'b-non-content) (yaml--parse-from-grammar '<end-of-stream>)))))))
+   ;; TODO: don't use the symbol t as a variable.
+   ((eq state 'b-chomped-last)
+    (let ((tt (nth 0 args)))
+      (message "b-chomped-last: %s" tt)
+      (yaml--frame "b-chomped-last"
+        (cond ((equal tt "clip")
+               ;; TODO: Fix this
+               (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
+                          (yaml--end-of-stream)))
+              ((equal tt "keep")
+               (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
+                          (yaml--end-of-stream)))
+              ((equal tt "strip")
+               (yaml--any (yaml--parse-from-grammar 'b-non-content)
+                          (yaml--end-of-stream)))))))
+
    ((eq state 'l-trail-comments) (let ((n (nth 0 args))) (yaml--frame "l-trail-comments" (yaml--all (yaml--parse-from-grammar 's-indent-lt n) (yaml--parse-from-grammar 'c-nb-comment-text) (yaml--parse-from-grammar 'b-comment) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment)))))))
    ((eq state 'ns-flow-map-yaml-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-map-yaml-key-entry" (yaml--all (yaml--parse-from-grammar 'ns-flow-yaml-node n c) (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c))) (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)) (yaml--parse-from-grammar 'e-node))))))
    ((eq state 's-indent) (let ((n (nth 0 args))) (yaml--frame "s-indent" (yaml--rep n n (lambda () (yaml--parse-from-grammar 's-space))))))
    ((eq state 'ns-esc-line-separator) (let () (yaml--frame "ns-esc-line-separator" (yaml--chr ?\L))))
    ((eq state 'ns-flow-yaml-node)
     (let ((n (nth 0 args)) (c (nth 1 args)))
-      (message "ns-flow-yaml-node: %s %s" n c)
       (yaml--frame "ns-flow-yaml-node"
         (yaml--any (yaml--parse-from-grammar 'c-ns-alias-node)
                    (yaml--parse-from-grammar 'ns-flow-yaml-content n c)
@@ -1180,7 +1214,14 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'c-directives-end) (let () (yaml--frame "c-directives-end" (yaml--all (yaml--chr ?\-) (yaml--chr ?\-) (yaml--chr ?\-)))))
    ((eq state 's-double-break) (let ((n (nth 0 args))) (yaml--frame "s-double-break" (yaml--any (yaml--parse-from-grammar 's-double-escaped n) (yaml--parse-from-grammar 's-flow-folded n)))))
    ((eq state 's-nb-spaced-text) (let ((n (nth 0 args))) (yaml--frame "s-nb-spaced-text" (yaml--all (yaml--parse-from-grammar 's-indent n) (yaml--parse-from-grammar 's-white) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-char)))))))
-   ((eq state 'l-folded-content) (let ((n (nth 0 args)) (t (nth 1 args))) (yaml--frame "l-folded-content" (yaml--all (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 'l-nb-diff-lines n) (yaml--parse-from-grammar 'b-chomped-last t)))) (yaml--parse-from-grammar 'l-chomped-empty n t))))) ;; TODO: don't use yaml--state-t here
+   ((eq state 'l-folded-content)
+    (let ((n (nth 0 args))
+          (tt (nth 1 args)))
+      (yaml--frame "l-folded-content"
+        (yaml--all (yaml--rep 0 1 (lambda ()
+                                    (yaml--all (yaml--parse-from-grammar 'l-nb-diff-lines n)
+                                               (yaml--parse-from-grammar 'b-chomped-last tt))))
+                   (yaml--parse-from-grammar 'l-chomped-empty n tt))))) ;; TODO: don't use yaml--state-t here
    ((eq state 'nb-ns-plain-in-line) (let ((c (nth 0 args))) (yaml--frame "nb-ns-plain-in-line" (yaml--rep2 0 nil (lambda () (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white))) (yaml--parse-from-grammar 'ns-plain-char c)))))))
    ((eq state 'nb-single-multi-line) (let ((n (nth 0 args))) (yaml--frame "nb-single-multi-line" (yaml--all (yaml--parse-from-grammar 'nb-ns-single-in-line) (yaml--any (yaml--parse-from-grammar 's-single-next-line n) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white))))))))
    ((eq state 'l-document-suffix) (let () (yaml--frame "l-document-suffix" (yaml--all (yaml--parse-from-grammar 'c-document-end) (yaml--parse-from-grammar 's-l-comments)))))
@@ -1208,7 +1249,12 @@ Rules for this function are defined by the yaml-spec JSON file."
                               (yaml--parse-from-grammar 'l+block-mapping n))))))
 
    ((eq state 'c-quoted-quote) (let () (yaml--frame "c-quoted-quote" (yaml--all (yaml--chr ?\') (yaml--chr ?\')))))
-   ((eq state 'l+block-sequence) (let ((n (nth 0 args))) (yaml--frame "l+block-sequence" (yaml--all (yaml--set m (yaml--auto-detect-indent n)) (yaml--rep 1 nil (lambda () (yaml--all (yaml--parse-from-grammar 's-indent (+ n (yaml--state-m))) (yaml--parse-from-grammar 'c-l-block-seq-entry (+ n (yaml--state-m))))))))))
+   ((eq state 'l+block-sequence)
+    (let ((n (nth 0 args)))
+      (yaml--frame "l+block-sequence"
+        (yaml--all (yaml--set m (yaml--auto-detect-indent n))
+                   (yaml--rep 1 nil (lambda () (yaml--all (yaml--parse-from-grammar 's-indent (+ n (yaml--state-m))) (yaml--parse-from-grammar 'c-l-block-seq-entry (+ n (yaml--state-m))))))))))
+
    ((eq state 'c-double-quote) (let () (yaml--frame "c-double-quote" (yaml--chr ?\"))))
    ((eq state 'ns-esc-backspace) (let () (yaml--frame "ns-esc-backspace" (yaml--chr ?\b))))
    ((eq state 'c-flow-json-content) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-flow-json-content" (yaml--any (yaml--parse-from-grammar 'c-flow-sequence n c) (yaml--parse-from-grammar 'c-flow-mapping n c) (yaml--parse-from-grammar 'c-single-quoted n c) (yaml--parse-from-grammar 'c-double-quoted n c)))))
@@ -1240,10 +1286,31 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'c-l-block-seq-entry) (let ((n (nth 0 args))) (yaml--frame "c-l-block-seq-entry" (yaml--all (yaml--chr ?\-) (yaml--chk "!" (yaml--parse-from-grammar 'ns-char)) (yaml--parse-from-grammar 's-l+block-indented n "block-in")))))
    ((eq state 'c-ns-properties) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-properties" (yaml--any (yaml--all (yaml--parse-from-grammar 'c-ns-tag-property) (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 's-separate n c) (yaml--parse-from-grammar 'c-ns-anchor-property))))) (yaml--all (yaml--parse-from-grammar 'c-ns-anchor-property) (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 's-separate n c) (yaml--parse-from-grammar 'c-ns-tag-property)))))))))
    ((eq state 'ns-directive-parameter) (let () (yaml--frame "ns-directive-parameter" (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-char))))))
-   ((eq state 'c-chomping-indicator) (let ((t (nth 0 args))) (yaml--frame "c-chomping-indicator" (yaml--any (yaml--set t (yaml--parse-from-grammar 'strip)) (yaml--set t (yaml--parse-from-grammar 'keep)) (yaml--set t (yaml--parse-from-grammar 'clip))))))
+
+   ((eq state 'c-chomping-indicator)
+    (let ()
+      (yaml--frame "c-chomping-indicator"
+        (prog1
+            (yaml--any (when (yaml--chr ?\-) (yaml--set t "strip") t)
+                       (when (yaml--chr ?\+) (yaml--set t "keep") t)
+                       (when (yaml--empty) (yaml--set t "clip") t))
+          (message "c-chomping-indicator: %s" (yaml--state-t))))))
+
    ((eq state 'ns-global-tag-prefix) (let () (yaml--frame "ns-global-tag-prefix" (yaml--all (yaml--parse-from-grammar 'ns-tag-char) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char)))))))
    ((eq state 'c-ns-flow-pair-json-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-flow-pair-json-key-entry" (yaml--all (yaml--parse-from-grammar 'c-s-implicit-json-key (yaml--parse-from-grammar 'flow-key)) (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c)))))
-   ((eq state 'l-literal-content) (let ((n (nth 0 args)) (t (nth 1 args))) (yaml--frame "l-literal-content" (yaml--all (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 'l-nb-literal-text n) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'b-nb-literal-next n))) (yaml--parse-from-grammar 'b-chomped-last t)))) (yaml--parse-from-grammar 'l-chomped-empty n t)))))
+
+   ((eq state 'l-literal-content)
+    (let ((n (nth 0 args))
+          (tt (nth 1 args)))
+      (yaml--frame "l-literal-content"
+        (progn
+          (message "l-literal-content: %s" tt)
+          (yaml--all (yaml--rep 0 1
+                                (lambda () (yaml--all (yaml--parse-from-grammar 'l-nb-literal-text n)
+                                                      (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'b-nb-literal-next n)))
+                                                      (yaml--parse-from-grammar 'b-chomped-last tt))))
+                     (yaml--parse-from-grammar 'l-chomped-empty n tt))))))
+
    ((eq state 'c-document-end) (let () (yaml--frame "c-document-end" (yaml--all (yaml--chr ?\.) (yaml--chr ?\.) (yaml--chr ?\.)))))
    ((eq state 'nb-double-text) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "nb-double-text" (cond ((equal c "block-key") (yaml--parse-from-grammar 'nb-double-one-line)) ((equal c "flow-in") (yaml--parse-from-grammar 'nb-double-multi-line n)) ((equal c "flow-key") (yaml--parse-from-grammar 'nb-double-one-line)) ((equal c "flow-out") (yaml--parse-from-grammar 'nb-double-multi-line n))))))
    ((eq state 's-b-comment) (let () (yaml--frame "s-b-comment" (yaml--all (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 's-separate-in-line) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'c-nb-comment-text)))))) (yaml--parse-from-grammar 'b-comment)))))

@@ -36,10 +36,14 @@
   (cond (= "<auto-detect-indent>" var-name)
         (list 'yaml--auto-detect-indent 'n)
 
+        (= "<end-of-stream>" var-name)
+        (list 'yaml--end-of-stream)
+
         (= "(match)" var-name)
         (list 'yaml--match)
 
-        (#{"in-flow" "flow-out" "flow-in" "block-key" "block-in" "block-out"} var-name)
+        (#{"in-flow" "flow-out" "flow-in" "block-key" "block-in" "block-out"
+           "clip" "keep" "strip"} var-name)
         var-name
 
         (> (count var-name) 2)
@@ -68,6 +72,8 @@
     (list 'length (gen-elisp-fn-arg (get m "(len)")))
     (get m "(ord)")
     (list 'yaml--ord (gen-elisp-lambda (list 'yaml--match))) ;; hack
+    (get m "(any)")
+    (concat (list 'yaml--any) (map gen-elisp-fn-arg (get m "(any)")))
 
     :else
     (let [[f args] (first m)]
@@ -177,9 +183,12 @@
     (get m "(max)")
     (list 'yaml--max (get m "(max)"))
 
-    (get m "(set)")
-    (let [[var-name val] (get m "(set)")]
-      (list 'yaml--set (symbol var-name) (gen-elisp-fn-arg val)))
+    (and (get m "(if)") (get m "(set)"))
+    (let [rule (get m "(if)")
+          [var-name val] (get m "(set)")]
+      (list 'when (gen-elisp-parse-expr rule)
+            (list 'yaml--set (symbol var-name) (gen-elisp-fn-arg val))
+            't))
 
     (get m "(case)")
     (let [case-params (get m "(case)")
