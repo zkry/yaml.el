@@ -184,6 +184,18 @@ This flag is intended for development purposes.")
   "The state that the YAML parser is with regards to incoming events.")
 (defvar yaml--root nil)
 
+(defun yaml--process-folded-text (text)
+  "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
+  (let* ((header-line (substring text 0 (string-match "\n" text)))
+         (text-body (substring text (1+ (string-match "\n" text)))))
+    text-body))
+
+(defun yaml--process-literal-text (text)
+  "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
+  (let* ((header-line (substring text 0 (string-match "\n" text)))
+         (text-body (substring text (1+ (string-match "\n" text)))))
+    text-body))
+
 (defun yaml--resolve-scalar-tag (scalar)
   (cond
    ;; tag:yaml.org,2002:null
@@ -355,7 +367,9 @@ This flag is intended for development purposes.")
                         (yaml--add-event (yaml--mapping-start-event t))))))
 
 (defconst yaml--grammar-events-out
-  '(("l-yaml-stream" . (lambda (text)
+  '(("c-b-block-header" . (lambda (text)
+                            (message "TODO")))
+    ("l-yaml-stream" . (lambda (text)
                          (yaml--check-document-end)
                          (yaml--add-event (yaml--stream-end-event))))
     ("ns-yaml-version" . (lambda (text)
@@ -472,10 +486,11 @@ This flag is intended for development purposes.")
                                   (replaced (substring replaced 1 (1- (length replaced)))))
                              (yaml--add-event (yaml--scalar-event "double" replaced)))))
     ("c-l+literal" . (lambda (text)
-                       ;; TODO
-                       (yaml--add-event (yaml--scalar-event "literal" text))))
+                       (let* ((processed-text (yaml--process-literal-text text indentation)))
+                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("c-l+folded" . (lambda (text)
-                      (yaml--add-event (yaml--scalar-event "folded" text))))
+                      (let* ((processed-text (yaml--process-folded-text text indentation)))
+                        (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("e-scalar" . (lambda (text)
                     (yaml--add-event (yaml--scalar-event "plain" ""))))
     ("c-ns-anchor-property" . (lambda (text)
@@ -540,11 +555,14 @@ This flag is intended for development purposes.")
          (yaml--pop-state)
          (if (not ,res-symbol)
              nil
-           (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules))))
+           (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules)))
+                 (t-state (yaml-state-m (car yaml-states))))
              (cond
               ((or (assoc ,name yaml--grammar-events-in)
                    (assoc ,name yaml--grammar-events-out))
-               (list ,name (substring yaml--parsing-input beg yaml--parsing-position) ,res-symbol))
+               (list ,name
+                     (substring yaml--parsing-input beg yaml--parsing-position)
+                     ,res-symbol))
               ((equal res-type 'list) (list ,name ,res-symbol))
               ((equal res-type 'literal) (substring yaml--parsing-input beg yaml--parsing-position))
               (t ,res-symbol))))))))
@@ -652,6 +670,22 @@ This flag is intended for development purposes.")
               (setq res (substring yaml--parsing-input beg end)))
           (setq states (cdr states)))))
     res))
+
+(defun yaml--auto-detect (n)
+  "Detect the indentation given N."
+  (let* ((slice (yaml--slice yaml--parsing-position))
+         (match (string-match
+                 "^.*\n\\(\\(?: *\n\\)*\\)\\( *\\)"
+                 slice)))
+    (if (not match)
+        1
+      (let ((pre (match-string 1 slice))
+            (m (- (length (match-string 2 slice)) n)))
+        (if (< m 1)
+            1
+          (when (string-match (format "^.\\{%d\\}." m) pre)
+            (error "Spaces found after indent in auto-detect (5LLU)"))
+          m)))))
 
 (defun yaml--auto-detect-indent (n)
   "Detect the indentation given N."
@@ -815,7 +849,7 @@ value.  It defaults to the symbol :false."
         (error (format "parser finished before end of input %s/%s"
                        yaml--parsing-position
                        (length yaml--parsing-input))))
-      (message "Parsed data: %s" res)
+      (message "Parsed data: %s" (pp-to-string res))
       (yaml--walk-events res)
       yaml--root)))
 
@@ -846,7 +880,7 @@ Rules for this function are defined by the yaml-spec JSON file."
         (yaml--any (when (yaml--parse-from-grammar 'ns-dec-digit)
                      (yaml--set m (yaml--ord (lambda () (yaml--match)))) t)
                    (when (yaml--empty)
-                     (yaml--set m (yaml--parse-from-grammar 'auto-detect)) t)))))
+                     (yaml--set m (yaml--auto-detect m)) t)))))
 
    ((eq state 'ns-reserved-directive)
     (let ()
@@ -941,11 +975,9 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'c-l+literal)
     (let ((n (nth 0 args)))
       (yaml--frame "c-l+literal"
-        (progn
-          (message "c-l+literal: %s" (yaml--state-t))
-          (yaml--all (yaml--chr ?\|)
-                     (yaml--parse-from-grammar 'c-b-block-header (yaml--state-m) (yaml--state-t))
-                     (yaml--parse-from-grammar 'l-literal-content (+ n (yaml--state-m)) (yaml--state-t)))))))
+        (yaml--all (yaml--chr ?\|)
+                   (yaml--parse-from-grammar 'c-b-block-header (yaml--state-m) (yaml--state-t))
+                   (yaml--parse-from-grammar 'l-literal-content (+ n (yaml--state-m)) (yaml--state-t))))))
 
    ((eq state 'c-single-quoted)
     (let ((n (nth 0 args))
