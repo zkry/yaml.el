@@ -281,6 +281,40 @@
   (should (equal 1.0e+INF (yaml--resolve-scalar-tag ".Inf")))
   (should (equal "hello world" (yaml--resolve-scalar-tag "hello world"))))
 
+(ert-deftest yaml-process-literal-text-test ()
+  "Test processing literal strings"
+  (should (equal (yaml--process-literal-text "\n  abc\n  def")
+                 "abc\ndef\n"))
+  (should (equal (yaml--process-literal-text "\n  abc\n\n  def")
+                 "abc\n\ndef\n"))
+  (should (equal (yaml--process-literal-text "1\n  abc\n  def")
+                 " abc\n def"))
+  (should (equal (yaml--process-literal-text "2\n   abc\n   def")
+                 " abc\n def\n"))
+  (should (equal (yaml--process-literal-text "-\n   abc\n   def\n   \n   \n   \n")
+                 "abc\ndef"))
+  (should (equal (yaml--process-literal-text "\n   abc\n   def\n   \n   \n   \n")
+                 "abc\ndef\n"))
+  (should (equal (yaml--process-literal-text "+\n   abc\n   def\n   \n   \n   \n")
+                 "abc\ndef\n\n\n\n")))
+
+(ert-deftest yaml-process-folded-text-test ()
+  "Test processing literal strings"
+  (should (equal (yaml--process-folded-text "\n  abc\n  def")
+                 "abc def\n"))
+  (should (equal (yaml--process-folded-text "\n  abc\n\n  def")
+                 "abc\ndef\n"))
+  (should (equal (yaml--process-folded-text "1\n  abc\n  def")
+                 " abc\n def\n"))
+  (should (equal (yaml--process-folded-text "2\n   abc\n   def")
+                 " abc\n def\n"))
+  (should (equal (yaml--process-folded-text "-\n   abc\n   def\n   \n   \n   \n")
+                 "abc def"))
+  (should (equal (yaml--process-folded-text "\n   abc\n   def\n   \n   \n   \n")
+                 "abc def\n"))
+  (should (equal (yaml--process-folded-text "+\n   abc\n   def\n   \n   \n   \n")
+                 "abc def\n\n\n\n")))
+
 (ert-deftest yaml-parsing-yaml ()
   "Tests YAML parsing."
   (should (yaml--hash-table-equal
@@ -305,6 +339,12 @@
 ;;   ? !!str xzy : !!str zyx
 ;; }")))
   )
+
+(yaml-parse-string
+ "abc:
+  def: >
+    value
+    value")
 
 ;; (yaml-parse-string "apiVersion: v1
 ;; description: A Helm chart for bidder canary

@@ -184,17 +184,58 @@ This flag is intended for development purposes.")
   "The state that the YAML parser is with regards to incoming events.")
 (defvar yaml--root nil)
 
+(defun yaml--parse-block-header (header)
+  "Parse the HEADER string returning chomping style and indent count."
+  (let* ((pos 0)
+         (chomp-indicator :clip)
+         (indentation-indicator nil)
+         (char (and (< pos (length header)) (aref header pos))))
+    (cond
+     ((equal char ?\n) (list chomp-indicator indentation-indicator))
+     ((equal char ?\-) (progn (setq chomp-indicator :strip) (setq pos (1+ pos))))
+     ((equal char ?\+) (progn (setq chomp-indicator :keep) (setq pos (1+ pos)))))
+    (let ((char (and (< pos (length header)) (aref header pos))))
+      (when char
+        (cond
+         ((< ?0 char ?9)
+          (setq indentation-indicator (- char ?0)))))
+      (list chomp-indicator indentation-indicator))))
+
+(defun yaml--chomp-text (text-body chomp)
+  "Change the ending newline of TEXT-BODY based on CHOMP."
+  (cond ((eq :clip chomp) (concat (string-trim-right text-body "\n*") "\n"))
+        ((eq :strip chomp) (string-trim-right text-body "\n*"))
+        ((eq :keep chomp) text-body)))
+
 (defun yaml--process-folded-text (text)
   "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
-  (let* ((header-line (substring text 0 (string-match "\n" text)))
-         (text-body (substring text (1+ (string-match "\n" text)))))
-    text-body))
+  (let* ((text (yaml--process-literal-text text))
+         (done))
+    (while (not done)
+      (let ((replaced (replace-regexp-in-string "\\([^\n]\\)\n\\([^\n ]\\)"
+                                                "\\1 \\2"
+                                                text)))
+        (when (equal replaced text)
+          (setq done t))
+        (setq text replaced)))
+    (replace-regexp-in-string "\n\\(\n+\\)\\([^\n]\\)" "\\1\\2" text)))
 
 (defun yaml--process-literal-text (text)
   "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
   (let* ((header-line (substring text 0 (string-match "\n" text)))
-         (text-body (substring text (1+ (string-match "\n" text)))))
-    text-body))
+         (text-body (substring text (1+ (string-match "\n" text))))
+         (parsed-header (yaml--parse-block-header header-line))
+         (chomp (car parsed-header))
+         (starting-spaces (or (and (cadr parsed-header)
+                                   (make-string (cadr parsed-header) ?\s))
+                              (let ((_ (string-match "^ *" text-body)))
+                                (match-string 0 text-body))))
+         (lines (split-string text-body "\n"))
+         (striped-lines (seq-map (lambda (l)
+                                   (string-remove-prefix starting-spaces l))
+                                 lines))
+         (text-body (string-join striped-lines "\n")))
+    (yaml--chomp-text text-body chomp)))
 
 (defun yaml--resolve-scalar-tag (scalar)
   (cond
@@ -486,10 +527,10 @@ This flag is intended for development purposes.")
                                   (replaced (substring replaced 1 (1- (length replaced)))))
                              (yaml--add-event (yaml--scalar-event "double" replaced)))))
     ("c-l+literal" . (lambda (text)
-                       (let* ((processed-text (yaml--process-literal-text text indentation)))
+                       (let* ((processed-text (yaml--process-literal-text text)))
                          (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("c-l+folded" . (lambda (text)
-                      (let* ((processed-text (yaml--process-folded-text text indentation)))
+                      (let* ((processed-text (yaml--process-folded-text text)))
                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("e-scalar" . (lambda (text)
                     (yaml--add-event (yaml--scalar-event "plain" ""))))
