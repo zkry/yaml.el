@@ -332,19 +332,50 @@
                  '("abc" "def" "ghi")))
   (should (equal (yaml-parse-string "- [abc, def, ghi]\n- [jkl, mno, pqr]\n- [stu, vwx, yz]")
                  '(("abc" "def" "ghi") ("jkl" "mno" "pqr") ("stu" "vwx" "yz"))))
-;;   (should (equal (yaml-parse-string "%YAML 1.2
-;; ---
-;; !!map {
-;;   ? !!str foo : !!seq [ !!str \"abc\", !!str \"def\"],
-;;   ? !!str xzy : !!str zyx
-;; }")))
   )
 
+
+;; (yaml-parse-string
+;;  "one: two
+;; three: four")
+
+;; (yaml-parse-string
+;;  "apiVersion: apps/v1
+;; kind: Deployment
+;; metadata:
+;;   name: nginx-deployment
+;; spec:
+;;   selector:
+;;     matchLabels:
+;;       app: nginx
+;;   replicas: 2 # tells deployment to run 2 pods matching the template
+;;   template:
+;;     metadata:
+;;       labels:
+;;         app: nginx
+;;     spec:
+;;       containers:
+;;       - name: nginx
+;;         image: nginx:1.14.2
+;;         ports:
+;;         - containerPort: 80")
+
+;; (yaml-parse-string
+;;  "schema: 'packages/api/src/schema.graphql'
+;; documents: 'packages/app/src/components/**/*.graphql'
+;; extensions:
+;;   customExtension:
+;;     foo: true")
+
 (yaml-parse-string
- "abc:
-  def: >
-    value
-    value")
+ "schema: './schema/*.graphql'
+extensions:
+  codegen:
+    generates:
+      ./src/types.ts:
+        plugins:
+          - typescript
+          - typescript-resolvers")
 
 ;; (yaml-parse-string "apiVersion: v1
 ;; description: A Helm chart for bidder canary
@@ -354,13 +385,5 @@
 ;; name: rtb-canary
 ;; version: 1.26.3
 ;; ")
-
-(defun yaml-c-ns-flow-map-separate-value (n c)
-  "Documentation string."
-  (yaml--frame "c-ns-flow-map-separate-value"
-    (yaml--all (yaml--chr ?\:)
-               (yaml--chk "!" (ns-plain-safe c))
-               (yaml--any (yaml--all (yaml-s-separate n c) (yaml-ns-flow-node n c))
-                          (yaml-e-node)))))
 
 (provide 'yaml-tests)
