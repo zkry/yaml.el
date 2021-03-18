@@ -30,6 +30,8 @@
 
 ;;; Code:
 
+(require 'seq)
+
 (defvar yaml--parse-debug nil
   "Turn on debugging messages when parsing YAML when non-nil.
 
@@ -60,7 +62,6 @@ This flag is intended for development purposes.")
 (defvar yaml--parsing-null-object nil)
 (defvar yaml--parsing-false-object nil)
 
-;; TODO: rename this to have two dashes.
 (cl-defstruct (yaml--state (:constructor yaml--state-create)
                           (:copier nil))
   doc tt m name lvl beg end)
@@ -386,7 +387,7 @@ This flag is intended for development purposes.")
   (setcar yaml--object-stack (reverse (car yaml--object-stack))))
 
 (defconst yaml--grammar-events-in
-  '(("l-yaml-stream" . (lambda ()
+  '(("l-yaml-stream" . (lambda () ;; TODO remvoe yaml--add-event
                          (yaml--add-event (yaml--stream-start-event))
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
@@ -566,19 +567,22 @@ This flag is intended for development purposes.")
   (declare (indent defun))
   (let ((res-symbol (make-symbol "res")))
     `(let ((beg yaml--parsing-position)
-          (_ (yaml--push-state ,name))
-          (,res-symbol ,rule))
+           (_ (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
+                (message "|%s>%s %40s \"%s\""
+                         (make-string (length yaml--states) ?-)
+                         (make-string (- 70 (length yaml--states)) ?\s)
+                         ,name
+                         (replace-regexp-in-string "\n" "\\n"
+                                                   (substring yaml--parsing-input yaml--parsing-position)
+                                                   nil 'literal))))
+           (_ (yaml--push-state ,name))
+           (,res-symbol ,rule))
       (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
-        (message "<%s|%s %40s \"%s\""
+        (message "<%s|%s %40s = %s"
                  (make-string (length yaml--states) ?-)
-                 (make-string (- 40 (length yaml--states)) ?\s)
+                 (make-string (- 70 (length yaml--states)) ?\s)
                  ,name
-                 (replace-regexp-in-string
-                  "\n"
-                  "\\n"
-                  (substring yaml--parsing-input beg yaml--parsing-position)
-                  nil
-                  'literal)))
+                 ,res-symbol))
       (yaml--pop-state)
       (if (not ,res-symbol)
           nil
@@ -669,7 +673,6 @@ This flag is intended for development purposes.")
                 `(lambda () ,form))
              forms)))
 
-;; Not sure if this actually helps the stack problem
 (defmacro yaml--any (&rest forms)
   "Pass if any of FORMS pass."
   (if (= 1 (length forms))
@@ -764,6 +767,7 @@ This flag is intended for development purposes.")
            (string-match "\\^g(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)" (substring yaml--parsing-input yaml--parsing-position)))))
 
 (defun yaml--ord (f)
+  "Convert an ASCII number returned by F to a number."
   (let ((res (funcall f)))
     (- (aref res 0) 48)))
 
@@ -828,7 +832,7 @@ This flag is intended for development purposes.")
   (yaml--parse-from-grammar 'l-yaml-stream))
 
 (defmacro yaml--set (variable value)
-  "Set the current state of VARIABLE to VALUE"
+  "Set the current state of VARIABLE to VALUE."
   (let ((res-sym (make-symbol "res")))
     `(let ((,res-sym ,value))
        (when ,res-sym
@@ -838,6 +842,11 @@ This flag is intended for development purposes.")
          ,res-sym))))
 
 (defmacro yaml--chk (type expr)
+  "Check if EXPR is non-nil at the parsing position.
+
+If TYPE is \"<=\" then check at the previous position.  If TYPE
+is \"!\" ensure that EXPR is nil.  Otherwise, if TYPE is \"=\"
+then check EXPR at the current position."
   (let ((start-symbol (make-symbol "start"))
         (ok-symbol (make-symbol "ok")))
     `(let ((,start-symbol yaml--parsing-position)
