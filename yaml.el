@@ -185,6 +185,9 @@ This flag is intended for development purposes.")
   "The state that the YAML parser is with regards to incoming events.")
 (defvar yaml--root nil)
 
+(defvar yaml--anchor-mappings nil)
+(defvar yaml--resolve-aliases nil)
+
 (defun yaml--parse-block-header (header)
   "Parse the HEADER string returning chomping style and indent count."
   (let* ((pos 0)
@@ -352,15 +355,29 @@ This flag is intended for development purposes.")
     (yaml--scalar-event nil obj))
   '(:sequence-end))
 
+(defun yaml--anchor-event (name)
+  (push :anchor yaml--state-stack)
+  (push `(:anchor ,name) yaml--object-stack)
+  (message "DEBUG ANCHOR: %s -> %s" name yaml--last-added-item))
+
 (defun yaml--scalar-event (style value)
+  (message "DEBUG SCALAR: %s" value)
+  (setq yaml--last-added-item value)
   (let ((top-state (car yaml--state-stack))
         (value (cond
                 ((stringp value) (yaml--resolve-scalar-tag value))
                 ((listp value) (yaml--format-list value))
-                ((hash-table-p value) (yaml--format-object value)))))
+                ((hash-table-p value) (yaml--format-object value))
+                ((vectorp value) value))))
     (cond
      ((not top-state)
       (setq yaml--root value))
+     ((equal top-state :anchor)
+      (let* ((anchor (pop yaml--object-stack))
+             (name (nth 1 anchor)))
+        (puthash name value yaml--anchor-mappings)
+        (pop yaml--state-stack)
+        (yaml--scalar-event nil value)))
      ((equal top-state :sequence)
       (let ((l (car yaml--object-stack)))
         (setcar yaml--object-stack (append l (list value)))))
@@ -378,6 +395,11 @@ This flag is intended for development purposes.")
   '(:scalar))
 
 (defun yaml--alias-event (name)
+  (if yaml--resolve-aliases
+      (let ((resolved (gethash name yaml--anchor-mappings)))
+        (unless resolved (error "Undefined alias '%s'" name))
+        (yaml--scalar-event nil resolved))
+    (yaml--scalar-event nil (vector :alias name)))
   '(:alias))
 
 (defun yaml--check-document-start () t)
@@ -476,7 +498,7 @@ This flag is intended for development purposes.")
                                                    (substring x 1)
                                                  "'"))
                                             replaced)))
-                             (yaml--add-event (yaml--scalar-event "single" replaced)))))
+                             (yaml--add-event (yaml--scalar-event "single" (substring replaced 1 (1- (length replaced))))))))
     ("c-double-quoted" . (lambda (text)
                            (let* ((replaced (replace-regexp-in-string
                                              "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -536,12 +558,13 @@ This flag is intended for development purposes.")
     ("e-scalar" . (lambda (text)
                     (yaml--add-event (yaml--scalar-event "plain" ""))))
     ("c-ns-anchor-property" . (lambda (text)
-                                (setq yaml--anchor (substring text 1))))
+                                (yaml--anchor-event (substring text 1))))
     ("c-ns-tag-property" . (lambda (text)
                              ;; (error "not implemented: %s" text)
                              ))
     ("c-ns-alias-node" . (lambda (text)
-                           (yaml--add-event (yaml--alias-event (substring text 1)))))))
+                           (yaml--add-event (yaml--alias-event (substring text 1)))))
+    ))
 
 (defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
@@ -560,7 +583,6 @@ This flag is intended for development purposes.")
               (funcall out-fn text))))
       (yaml--walk-events (car tree))
       (yaml--walk-events (cdr tree)))))
-
 
 (defmacro yaml--frame (name rule)
   "Add a new state frame of NAME for RULE."
@@ -877,6 +899,8 @@ value.  It defaults to the symbol :false."
   (setq yaml--object-stack nil)
   (setq yaml--state-stack nil)
   (setq yaml--root nil)
+  (setq yaml--anchor-mappings (make-hash-table :test 'equal))
+  (setq yaml--resolve-aliases nil)
   (let ((object-type (plist-get args :object-type))
         (sequence-type (plist-get args :sequence-type))
         (null-object (plist-get args :null-object))
@@ -906,7 +930,10 @@ value.  It defaults to the symbol :false."
         (error (format "parser finished before end of input %s/%s"
                        yaml--parsing-position
                        (length yaml--parsing-input))))
-      (message "Parsed data: %s" (pp-to-string res))
+      (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
+      (yaml--walk-events res)
+      (setq yaml--root nil)
+      (setq yaml--resolve-aliases t)
       (yaml--walk-events res)
       yaml--root)))
 

@@ -332,33 +332,114 @@
                  '("abc" "def" "ghi")))
   (should (equal (yaml-parse-string "- [abc, def, ghi]\n- [jkl, mno, pqr]\n- [stu, vwx, yz]")
                  '(("abc" "def" "ghi") ("jkl" "mno" "pqr") ("stu" "vwx" "yz"))))
+  (should (equal (yaml-parse-string "a")
+                 "a"))
+  (should (equal (yaml-parse-string "\"a\"")
+                 "a"))
+  (should (equal (yaml-parse-string "'a'")
+                 "a"))
+  (should (equal (yaml-parse-string "- !!str \"a\"
+- 'b'
+- &anchor \"c\"
+- *anchor
+- !!str")
+                 ["a" "b" "c" "c" ""])))
+
+(ert-deftest yaml-parsing-completes ()
+  "Tests that the yaml parses."
+  (should (yaml-parse-string "one: two"))
+  (should (yaml-parse-string "!!map { ? !!str one : !!str one}"))
+  (should (yaml-parse-string "\"one\" : [
+  \"key\" : value,
+ ]"))
+  (should (yaml-parse-string "{ ? !!str : \"two\"}"))
+  (should (yaml-parse-string "{ ? !!str : !!str }"))
+  (should (yaml-parse-string "{ ? : }"))
+  (should (yaml-parse-string "{ ? !!str \"one\" : \"two\"}"))
+  (should (yaml-parse-string
+           "apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+spec:
+  selector:
+    matchLabels:
+      app: nginx
+  replicas: 2 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:1.14.2
+        ports:
+        - containerPort: 80"))
+
+  ;; example 7.17
+  ;; TODO: The empty strings of "http://foo.com" and "omitted value" should be tagged as !!null.
+  (should (yaml-parse-string
+           "{
+unquoted : \"separate\",
+http://foo.com,
+omitted value:,
+: omitted key,
+}"))
+
+  ;; example 7.18
+  (should (yaml-parse-string
+           "{
+\"adjacent\":value,
+\"readable\":·value,
+\"empty\":
+}"))
+
+  ;; example 7.19
+  (should (yaml-parse-string
+           "[
+foo: bar
+]"))
+
+  ;; example 7.20
+  (should (yaml-parse-string
+           "[
+? foo
+ bar : baz
+]"))
+
+  ;; example 7.21
+  (should (yaml-parse-string
+           "- [ YAML : separate ]
+- [ : empty key entry ]
+- [ {JSON: like}:adjacent ]"))
+
+  ;; example 7.22
+  (should (not (condition-case n
+                   (yaml-parse-string "[ foo
+ bar: invalid,
+ \"foo...>1K characters...bar\": invalid ]")
+                 (error nil))))
+
+  ;; example 7.23
+  (should (yaml-parse-string "- [ a, b ]
+- { a: b }
+- \"a\"
+- 'b'
+- c"))
+
+  ;; example 7.24
   )
 
+(condition-case nil
+    1
+  (error 'error))
 
 ;; (yaml-parse-string
 ;;  "one: two
 ;; three: four")
 
-;; (yaml-parse-string
-;;  "apiVersion: apps/v1
-;; kind: Deployment
-;; metadata:
-;;   name: nginx-deployment
-;; spec:
-;;   selector:
-;;     matchLabels:
-;;       app: nginx
-;;   replicas: 2 # tells deployment to run 2 pods matching the template
-;;   template:
-;;     metadata:
-;;       labels:
-;;         app: nginx
-;;     spec:
-;;       containers:
-;;       - name: nginx
-;;         image: nginx:1.14.2
-;;         ports:
-;;         - containerPort: 80")
+
 
 ;; (yaml-parse-string
 ;;  "schema: 'packages/api/src/schema.graphql'
@@ -376,6 +457,17 @@ extensions:
         plugins:
           - typescript
           - typescript-resolvers")
+
+(yaml-parse-string "
+recipe:
+  ingredients:
+  - milk
+  - eggs
+  - öil
+  - flour
+  duration: 10
+  steps: null"
+                   :object-type 'alist)
 
 ;; (yaml-parse-string "apiVersion: v1
 ;; description: A Helm chart for bidder canary
