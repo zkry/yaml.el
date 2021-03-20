@@ -567,7 +567,7 @@ This flag is intended for development purposes.")
   (declare (indent defun))
   (let ((res-symbol (make-symbol "res")))
     `(let ((beg yaml--parsing-position)
-           (_ (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
+           (_ (when (and yaml--parse-debug (not (member ,name yaml--tracing-ignore)))
                 (message "|%s>%s %40s \"%s\""
                          (make-string (length yaml--states) ?-)
                          (make-string (- 70 (length yaml--states)) ?\s)
@@ -902,7 +902,7 @@ value.  It defaults to the symbol :false."
     (let ((res (yaml--parse string
                  (yaml--top))))
 
-      (when (and yaml--parse-debug (< yaml--parsing-position (length yaml--parsing-input)))
+      (when (< yaml--parsing-position (length yaml--parsing-input))
         (error (format "parser finished before end of input %s/%s"
                        yaml--parsing-position
                        (length yaml--parsing-input))))
@@ -947,9 +947,14 @@ Rules for this function are defined by the yaml-spec JSON file."
     (let ((n (nth 0 args))
           (c (nth 1 args)))
       (yaml--frame "ns-flow-map-implicit-entry"
-        (yaml--any (yaml--parse-from-grammar 'ns-flow-map-yaml-key-entry n c)
-                   (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)
-                   (yaml--parse-from-grammar 'c-ns-flow-map-json-key-entry n c)))))
+        ;; NOTE: I ran into a bug with the order of these rules. It seems
+        ;; sometimes ns-flow-map-yaml-key-entry succeeds with an empty
+        ;; when the correct answer should be
+        ;; c-ns-flow-map-json-key-entry.  Changing the order seemed to
+        ;; have fix this but this seems like a bandage fix.
+        (yaml--any (yaml--parse-from-grammar 'c-ns-flow-map-json-key-entry n c)
+                   (yaml--parse-from-grammar 'ns-flow-map-yaml-key-entry n c)
+                   (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)))))
 
    ((eq state 'ns-esc-double-quote)
     (yaml--frame "ns-esc-double-quote"
@@ -1393,7 +1398,7 @@ Rules for this function are defined by the yaml-spec JSON file."
         (message "c-chomping-indicator: %s" (yaml--state-curr-t)))))
 
    ((eq state 'ns-global-tag-prefix) (yaml--frame "ns-global-tag-prefix" (yaml--all (yaml--parse-from-grammar 'ns-tag-char) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char))))))
-   ((eq state 'c-ns-flow-pair-json-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-flow-pair-json-key-entry" (yaml--all (yaml--parse-from-grammar 'c-s-implicit-json-key (yaml--parse-from-grammar 'flow-key)) (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c)))))
+   ((eq state 'c-ns-flow-pair-json-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-flow-pair-json-key-entry" (yaml--all (yaml--parse-from-grammar 'c-s-implicit-json-key "flow-key") (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c)))))
 
    ((eq state 'l-literal-content)
     (let ((n (nth 0 args))
@@ -1461,7 +1466,7 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'ns-flow-pair-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-pair-entry" (yaml--any (yaml--parse-from-grammar 'ns-flow-pair-yaml-key-entry n c) (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c) (yaml--parse-from-grammar 'c-ns-flow-pair-json-key-entry n c)))))
    ((eq state 'c-flow-indicator) (yaml--frame "c-flow-indicator" (yaml--any (yaml--chr ?\,) (yaml--chr ?\[) (yaml--chr ?\]) (yaml--chr ?\{) (yaml--chr ?\}))))
-   ((eq state 'ns-flow-pair-yaml-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-pair-yaml-key-entry" (yaml--all (yaml--parse-from-grammar 'ns-s-implicit-yaml-key (yaml--parse-from-grammar 'flow-key)) (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
+   ((eq state 'ns-flow-pair-yaml-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-pair-yaml-key-entry" (yaml--all (yaml--parse-from-grammar 'ns-s-implicit-yaml-key "flow-key") (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
    ((eq state 'e-scalar) (yaml--frame "e-scalar" (yaml--empty)))
    ((eq state 's-indent-lt) (let ((n (nth 0 args))) (yaml--frame "s-indent-lt" (yaml--may (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space))) (< (length (yaml--match)) n))))))
    ((eq state 'nb-single-one-line) (yaml--frame "nb-single-one-line" (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-single-char)))))
@@ -1596,7 +1601,7 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'ns-flow-content) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-content" (yaml--any (yaml--parse-from-grammar 'ns-flow-yaml-content n c) (yaml--parse-from-grammar 'c-flow-json-content n c)))))
    ((eq state 'c-ns-flow-map-separate-value) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-flow-map-separate-value" (yaml--all (yaml--chr ?\:) (yaml--chk "!" (yaml--parse-from-grammar 'ns-plain-safe c)) (yaml--any (yaml--all (yaml--parse-from-grammar 's-separate n c) (yaml--parse-from-grammar 'ns-flow-node n c)) (yaml--parse-from-grammar 'e-node))))))
-   ((eq state 'in-flow) (let ((c (nth 0 args))) (yaml--frame "in-flow" (cond ((equal c "block-key") (yaml--parse-from-grammar 'flow-key)) ((equal c "flow-in") "flow-in") ((equal c "flow-key") (yaml--parse-from-grammar 'flow-key)) ((equal c "flow-out") "flow-in")))))
+   ((eq state 'in-flow) (let ((c (nth 0 args))) (yaml--frame "in-flow" (cond ((equal c "block-key") "flow-key") ((equal c "flow-in") "flow-in") ((equal c "flow-key") "flow-key") ((equal c "flow-out") "flow-in")))))
    ((eq state 'c-verbatim-tag) (yaml--frame "c-verbatim-tag" (yaml--all (yaml--chr ?\!) (yaml--chr ?\<) (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char))) (yaml--chr ?\>))))
    ((eq state 'c-literal) (yaml--frame "c-literal" (yaml--chr ?\|)))
    ((eq state 'ns-esc-line-feed) (yaml--frame "ns-esc-line-feed" (yaml--chr ?\n)))
