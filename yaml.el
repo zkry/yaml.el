@@ -1654,12 +1654,14 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'l+block-mapping)
     (yaml--frame "l+block-mapping"
       (let ((new-m (yaml--auto-detect-indent (nth 0 args))))
-        (yaml--all (yaml--set m new-m)
-                   (yaml--rep 1 nil
-                              (lambda ()
-                                (yaml--all
-                                 (yaml--parse-from-grammar 's-indent (+ (nth 0 args) new-m))
-                                 (yaml--parse-from-grammar 'ns-l-block-map-entry (+ (nth 0 args) new-m)))))))))
+        (if (= 0 new-m)
+            nil ;; For some fixed auto-detected m > 0
+          (yaml--all (yaml--set m new-m)
+                     (yaml--rep 1 nil
+                                (lambda ()
+                                  (yaml--all
+                                   (yaml--parse-from-grammar 's-indent (+ (nth 0 args) new-m))
+                                   (yaml--parse-from-grammar 'ns-l-block-map-entry (+ (nth 0 args) new-m))))))))))
 
    ((eq state 'c-ns-flow-map-adjacent-value) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "c-ns-flow-map-adjacent-value" (yaml--all (yaml--chr ?\:) (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c))) (yaml--parse-from-grammar 'ns-flow-node n c)) (yaml--parse-from-grammar 'e-node))))))
    ((eq state 's-single-next-line) (let ((n (nth 0 args))) (yaml--frame "s-single-next-line" (yaml--all (yaml--parse-from-grammar 's-flow-folded n) (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 'ns-single-char) (yaml--parse-from-grammar 'nb-ns-single-in-line) (yaml--any (yaml--parse-from-grammar 's-single-next-line n) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))))))))))
