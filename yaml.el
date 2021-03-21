@@ -30,6 +30,7 @@
 
 ;;; Code:
 
+(require 'subr-x)
 (require 'seq)
 
 (defvar yaml--parse-debug nil
@@ -320,7 +321,7 @@ This flag is intended for development purposes.")
 
 (defun yaml--add-event (e)
   "Add event E."
-  (message "Adding event: %s" e))
+  nil)
 
 (defun yaml--stream-start-event ()
   "Create the data for a stream-start event."
@@ -360,11 +361,9 @@ This flag is intended for development purposes.")
 
 (defun yaml--anchor-event (name)
   (push :anchor yaml--state-stack)
-  (push `(:anchor ,name) yaml--object-stack)
-  (message "DEBUG ANCHOR: %s -> %s" name yaml--last-added-item))
+  (push `(:anchor ,name) yaml--object-stack))
 
 (defun yaml--scalar-event (style value)
-  (message "DEBUG SCALAR: %s" value)
   (setq yaml--last-added-item value)
   (let ((top-state (car yaml--state-stack))
         (value (cond
@@ -448,7 +447,7 @@ This flag is intended for development purposes.")
 
 (defconst yaml--grammar-events-out
   '(("c-b-block-header" . (lambda (text)
-                            (message "TODO")))
+                            nil))
     ("l-yaml-stream" . (lambda (text)
                          (yaml--check-document-end)
                          (yaml--add-event (yaml--stream-end-event))))
@@ -576,7 +575,6 @@ This flag is intended for development purposes.")
                       (let* ((processed-text (yaml--process-folded-text text)))
                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("e-scalar" . (lambda (text)
-                    (message "DEBUG adding e-scalar")
                     (yaml--add-event (yaml--scalar-event "plain" "null"))))
     ("c-ns-anchor-property" . (lambda (text)
                                 (yaml--anchor-event (substring text 1))))
@@ -590,7 +588,6 @@ This flag is intended for development purposes.")
 
 (defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
-  ;;(message ">>> %s" tree)
   (when (consp tree)
     (if (stringp (car tree))
         (let ((grammar-rule (car tree))
@@ -1331,7 +1328,6 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 's-indent)
     (let ((n (nth 0 args)))
-      (message "debug: s-indent: %d %s" n (yaml--slice yaml--parsing-position))
       (yaml--frame "s-indent"
         (yaml--rep n n (lambda () (yaml--parse-from-grammar 's-space))))))
 
@@ -1457,7 +1453,6 @@ Rules for this function are defined by the yaml-spec JSON file."
       ;; NOTE: deviated from the spec example here by making new-m at least 1.  The wording and examples lead me to believe this is how it's done.
       ;; ie /* For some fixed auto-detected m > 0 */
       (let ((new-m (max (yaml--auto-detect-indent (nth 0 args)) 1)))
-        (message "DEBUG l+block-sequence: %s %s" (nth 0 args) new-m)
         (yaml--all (yaml--set m new-m)
                    (yaml--rep 1 nil
                               (lambda ()
@@ -1680,11 +1675,9 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'c-chomping-indicator)
     (yaml--frame "c-chomping-indicator"
-      (prog1
-          (yaml--any (when (yaml--chr ?\-) (yaml--set t "strip") t)
-                     (when (yaml--chr ?\+) (yaml--set t "keep") t)
-                     (when (yaml--empty) (yaml--set t "clip") t))
-        (message "c-chomping-indicator: %s" (yaml--state-curr-t)))))
+      (yaml--any (when (yaml--chr ?\-) (yaml--set t "strip") t)
+                 (when (yaml--chr ?\+) (yaml--set t "keep") t)
+                 (when (yaml--empty) (yaml--set t "clip") t))))
 
    ((eq state 'ns-global-tag-prefix)
     (yaml--frame "ns-global-tag-prefix"
