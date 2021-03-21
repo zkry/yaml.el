@@ -41,7 +41,7 @@
   (should (equal (yaml--process-literal-text "\n  abc\n\n  def")
                  "abc\n\ndef\n"))
   (should (equal (yaml--process-literal-text "1\n  abc\n  def")
-                 " abc\n def"))
+                 " abc\n def\n"))
   (should (equal (yaml--process-literal-text "2\n   abc\n   def")
                  " abc\n def\n"))
   (should (equal (yaml--process-literal-text "-\n   abc\n   def\n   \n   \n   \n")
