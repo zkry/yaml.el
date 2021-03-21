@@ -482,6 +482,8 @@ keep: |+
 "))
   (should (yaml-parse-string "block sequence:
   - one
-  - two : three")))
+  - two : three"))
+  (should (yaml-parse-string "- # Empty
+- abc")))
 
 (provide 'yaml-tests)

@@ -371,7 +371,8 @@ This flag is intended for development purposes.")
                 ((stringp value) (yaml--resolve-scalar-tag value))
                 ((listp value) (yaml--format-list value))
                 ((hash-table-p value) (yaml--format-object value))
-                ((vectorp value) value))))
+                ((vectorp value) value)
+                ((not value) nil))))
     (cond
      ((not top-state)
       (setq yaml--root value))
@@ -575,7 +576,8 @@ This flag is intended for development purposes.")
                       (let* ((processed-text (yaml--process-folded-text text)))
                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("e-scalar" . (lambda (text)
-                    (yaml--add-event (yaml--scalar-event "plain" ""))))
+                    (message "DEBUG adding e-scalar")
+                    (yaml--add-event (yaml--scalar-event "plain" "null"))))
     ("c-ns-anchor-property" . (lambda (text)
                                 (yaml--anchor-event (substring text 1))))
     ("c-ns-tag-property" . (lambda (text)
@@ -584,8 +586,7 @@ This flag is intended for development purposes.")
     ("l-trail-comments" . (lambda (text)
                             (yaml--add-event (yaml--trail-comments-event text))))
     ("c-ns-alias-node" . (lambda (text)
-                           (yaml--add-event (yaml--alias-event (substring text 1)))))
-    ))
+                           (yaml--add-event (yaml--alias-event (substring text 1)))))))
 
 (defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
@@ -616,15 +617,15 @@ This flag is intended for development purposes.")
                          (make-string (- 70 (length yaml--states)) ?\s)
                          ,name
                          args
-                         (substring yaml--parsing-input yaml--parsing-position))))
+                         (yaml--slice yaml--parsing-position))))
            (_ (yaml--push-state ,name))
            (,res-symbol ,rule))
       (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
-        (message "<%s|%s %40s"
+        (message "<%s|%s %40s = '%s'"
                  (make-string (length yaml--states) ?-)
                  (make-string (- 70 (length yaml--states)) ?\s)
                  ,name
-                 ))
+                 (substring yaml--parsing-input beg yaml--parsing-position)))
       (yaml--pop-state)
       (if (not ,res-symbol)
           nil
@@ -1387,12 +1388,16 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'l+block-sequence)
     (yaml--frame "l+block-sequence"
-                 (yaml--all (yaml--set m (yaml--auto-detect-indent (nth 0 args)))
-                            (yaml--rep 1 nil
-                                       (lambda ()
-                                         (yaml--all
-                                          (yaml--parse-from-grammar 's-indent (+ (nth 0 args) (yaml--state-curr-m)))
-                                          (yaml--parse-from-grammar 'c-l-block-seq-entry (+ (nth 0 args) (yaml--state-curr-m)))))))))
+      ;; NOTE: deviated from the spec example here by making new-m at least 1.  The wording and examples lead me to believe this is how it's done.
+      ;; ie /* For some fixed auto-detected m > 0 */
+      (let ((new-m (max (yaml--auto-detect-indent (nth 0 args)) 1)))
+        (message "DEBUG l+block-sequence: %s %s" (nth 0 args) new-m)
+        (yaml--all (yaml--set m new-m)
+                   (yaml--rep 1 nil
+                              (lambda ()
+                                (yaml--all
+                                 (yaml--parse-from-grammar 's-indent (+ (nth 0 args) new-m))
+                                 (yaml--parse-from-grammar 'c-l-block-seq-entry (+ (nth 0 args) new-m)))))))))
 
    ((eq state 'c-double-quote) (yaml--frame "c-double-quote" (yaml--chr ?\")))
    ((eq state 'ns-esc-backspace) (yaml--frame "ns-esc-backspace" (yaml--chr ?\b)))
@@ -1403,8 +1408,14 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 'c-non-specific-tag) (yaml--frame "c-non-specific-tag" (yaml--chr ?\!)))
    ((eq state 'l-directive-document) (yaml--frame "l-directive-document" (yaml--all (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'l-directive))) (yaml--parse-from-grammar 'l-explicit-document))))
    ((eq state 'c-l-block-map-explicit-entry) (let ((n (nth 0 args))) (yaml--frame "c-l-block-map-explicit-entry" (yaml--all (yaml--parse-from-grammar 'c-l-block-map-explicit-key n) (yaml--any (yaml--parse-from-grammar 'l-block-map-explicit-value n) (yaml--parse-from-grammar 'e-node))))))
-   ((eq state 'e-node) (yaml--frame "e-node" (yaml--parse-from-grammar 'e-scalar)))
-   ((eq state 'seq-spaces) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "seq-spaces" (cond ((equal c "block-in") n) ((equal c "block-out") (yaml--sub n 1))))))
+   ((eq state 'e-node)
+    (yaml--frame "e-node"
+      (yaml--parse-from-grammar 'e-scalar)))
+   ((eq state 'seq-spaces)
+    (let ((n (nth 0 args)) (c (nth 1 args)))
+      (yaml--frame "seq-spaces"
+        (cond ((equal c "block-in") n)
+              ((equal c "block-out") (yaml--sub n 1))))))
    ((eq state 'l-yaml-stream) (yaml--frame "l-yaml-stream" (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-document-prefix))) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-any-document))) (yaml--rep2 0 nil (lambda () (yaml--any (yaml--all (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'l-document-suffix))) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-document-prefix))) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-any-document)))) (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-document-prefix))) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-explicit-document))))))))))
    ((eq state 'nb-double-one-line) (yaml--frame "nb-double-one-line" (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-double-char)))))
    ((eq state 's-l-comments) (yaml--frame "s-l-comments" (yaml--all (yaml--any (yaml--parse-from-grammar 's-b-comment) (yaml--start-of-line)) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment))))))
