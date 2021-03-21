@@ -343,7 +343,37 @@
 - &anchor \"c\"
 - *anchor
 - !!str")
-                 ["a" "b" "c" "c" ""])))
+                 ["a" "b" "c" "c" ""]))
+  ;; example 8.1
+  (should (equal (yaml-parse-string "- | # Empty header
+ literal
+- >1 # Indentation indicator
+  folded
+- |+ # Chomping indicator
+ keep
+
+- >1- # Both indicators↓
+  strip")
+                 ["literal\n" " folded\n" "keep\n\n" " strip"]))
+
+  (should (equal (yaml-parse-string ">
+
+ folded
+ line
+
+ next
+ line
+   * bullet
+
+   * list
+   * lines
+
+ last
+ line
+
+# Comment")
+
+                 "\nfolded line\nnext line\n  * bullet\n\n  * list\n  * lines\n\nlast line\n")))
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."
@@ -428,54 +458,31 @@ foo: bar
 - 'b'
 - c"))
 
-  ;; example 7.24
+  ;; example 8.1
+;;   (should (yaml-parse-string "- |
+;; \sdetected
+;; - >
+;; \s
+;; \s\s
+;; \s\s# detected
+;; - |1
+;; \s\sexplicit
+;; - >
+;; \s\t
+  ;; \sdetected"))
+
+
+  ;; example 8.2
+  (should (yaml-parse-string "strip: |-
+  text
+clip: |
+  text
+keep: |+
+  text
+"))
+
+  ()
+
   )
-
-(condition-case nil
-    1
-  (error 'error))
-
-;; (yaml-parse-string
-;;  "one: two
-;; three: four")
-
-
-
-;; (yaml-parse-string
-;;  "schema: 'packages/api/src/schema.graphql'
-;; documents: 'packages/app/src/components/**/*.graphql'
-;; extensions:
-;;   customExtension:
-;;     foo: true")
-
-(yaml-parse-string
- "schema: './schema/*.graphql'
-extensions:
-  codegen:
-    generates:
-      ./src/types.ts:
-        plugins:
-          - typescript
-          - typescript-resolvers")
-
-(yaml-parse-string "
-recipe:
-  ingredients:
-  - milk
-  - eggs
-  - öil
-  - flour
-  duration: 10
-  steps: null"
-                   :object-type 'alist)
-
-;; (yaml-parse-string "apiVersion: v1
-;; description: A Helm chart for bidder canary
-;; home: https://github.com/travelaudience/bidder-bidder
-;; maintainers:
-;; - name: realtime-team
-;; name: rtb-canary
-;; version: 1.26.3
-;; ")
 
 (provide 'yaml-tests)

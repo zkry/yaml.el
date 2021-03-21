@@ -120,7 +120,7 @@ This flag is intended for development purposes.")
 
 (defun yaml--state-curr-m ()
   "Return the doc property of current state."
-  (yaml--state-m (yaml--state-curr)))
+  (or (yaml--state-m (yaml--state-curr)) 1))
 
 (defun yaml--state-curr-end ()
   "Return the doc property of current state."
@@ -194,15 +194,18 @@ This flag is intended for development purposes.")
          (chomp-indicator :clip)
          (indentation-indicator nil)
          (char (and (< pos (length header)) (aref header pos))))
-    (cond
-     ((equal char ?\n) (list chomp-indicator indentation-indicator))
-     ((equal char ?\-) (progn (setq chomp-indicator :strip) (setq pos (1+ pos))))
-     ((equal char ?\+) (progn (setq chomp-indicator :keep) (setq pos (1+ pos)))))
-    (let ((char (and (< pos (length header)) (aref header pos))))
+    (when (or (eq char ?\|) (eq char ?\>))
+      (setq pos (1+ pos))
+      (setq char (and (< pos (length header)) (aref header pos))))
+    (when char
+      (cond
+       ((< ?0 char ?9)
+        (progn (setq indentation-indicator (- char ?0)) (setq pos (1+ pos))))))
+    (let ((char (and (< pos (length header)) (aref header pos)))) ;
       (when char
         (cond
-         ((< ?0 char ?9)
-          (setq indentation-indicator (- char ?0)))))
+         ((equal char ?\-) (progn (setq chomp-indicator :strip)))
+         ((equal char ?\+) (progn (setq chomp-indicator :keep)))))
       (list chomp-indicator indentation-indicator))))
 
 (defun yaml--chomp-text (text-body chomp)
@@ -222,7 +225,7 @@ This flag is intended for development purposes.")
         (when (equal replaced text)
           (setq done t))
         (setq text replaced)))
-    (replace-regexp-in-string "\n\\(\n+\\)\\([^\n]\\)" "\\1\\2" text)))
+    (replace-regexp-in-string "\\(\\(?:^\\|\n\\)[^ \n][^\n]*\\)\n\\(\n+\\)\\([^\n ]\\)" "\\1\\2\\3" text)))
 
 (defun yaml--process-literal-text (text)
   "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
@@ -232,8 +235,8 @@ This flag is intended for development purposes.")
          (chomp (car parsed-header))
          (starting-spaces (or (and (cadr parsed-header)
                                    (make-string (cadr parsed-header) ?\s))
-                              (let ((_ (string-match "^ *" text-body)))
-                                (match-string 0 text-body))))
+                              (let ((_ (string-match "^\n*\\( *\\)" text-body)))
+                                (match-string 1 text-body))))
          (lines (split-string text-body "\n"))
          (striped-lines (seq-map (lambda (l)
                                    (string-remove-prefix starting-spaces l))
@@ -391,6 +394,13 @@ This flag is intended for development purposes.")
               (table (car yaml--object-stack)))
           (puthash key value table))
         (pop yaml--state-stack)))
+     ((equal top-state :trail-comments)
+      (pop yaml--state-stack)
+      (let ((comment-text (pop yaml--object-stack)))
+        (unless (stringp value)
+          (error "Trail-comments can't be nested under non-string"))
+        (yaml--scalar-event style (string-trim-right value (concat (regexp-quote comment-text) "\n*$"))))
+      (pop yaml--state-stack))
      ((equal top-state nil))))
   '(:scalar))
 
@@ -401,6 +411,11 @@ This flag is intended for development purposes.")
         (yaml--scalar-event nil resolved))
     (yaml--scalar-event nil (vector :alias name)))
   '(:alias))
+
+(defun yaml--trail-comments-event (text)
+  (push :trail-comments yaml--state-stack)
+  (push text yaml--object-stack)
+  '(:trail-comments))
 
 (defun yaml--check-document-start () t)
 (defun yaml--check-document-end () t)
@@ -553,6 +568,10 @@ This flag is intended for development purposes.")
                        (let* ((processed-text (yaml--process-literal-text text)))
                          (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("c-l+folded" . (lambda (text)
+                      (when (equal (car yaml--state-stack) :trail-comments)
+                        (pop yaml--state-stack)
+                        (let ((comment-text (pop yaml--object-stack)))
+                          (setq text (string-trim-right text (concat (regexp-quote comment-text) "\n*$")))))
                       (let* ((processed-text (yaml--process-folded-text text)))
                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
     ("e-scalar" . (lambda (text)
@@ -562,6 +581,8 @@ This flag is intended for development purposes.")
     ("c-ns-tag-property" . (lambda (text)
                              ;; (error "not implemented: %s" text)
                              ))
+    ("l-trail-comments" . (lambda (text)
+                            (yaml--add-event (yaml--trail-comments-event text))))
     ("c-ns-alias-node" . (lambda (text)
                            (yaml--add-event (yaml--alias-event (substring text 1)))))
     ))
@@ -590,21 +611,20 @@ This flag is intended for development purposes.")
   (let ((res-symbol (make-symbol "res")))
     `(let ((beg yaml--parsing-position)
            (_ (when (and yaml--parse-debug (not (member ,name yaml--tracing-ignore)))
-                (message "|%s>%s %40s \"%s\""
+                (message "|%s>%s %40s args=%s '%s'"
                          (make-string (length yaml--states) ?-)
                          (make-string (- 70 (length yaml--states)) ?\s)
                          ,name
-                         (replace-regexp-in-string "\n" "\\n"
-                                                   (substring yaml--parsing-input yaml--parsing-position)
-                                                   nil 'literal))))
+                         args
+                         (substring yaml--parsing-input yaml--parsing-position))))
            (_ (yaml--push-state ,name))
            (,res-symbol ,rule))
       (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
-        (message "<%s|%s %40s = %s"
+        (message "<%s|%s %40s"
                  (make-string (length yaml--states) ?-)
                  (make-string (- 70 (length yaml--states)) ?\s)
                  ,name
-                 ,res-symbol))
+                 ))
       (yaml--pop-state)
       (if (not ,res-symbol)
           nil
@@ -1279,7 +1299,6 @@ Rules for this function are defined by the yaml-spec JSON file."
    ;; TODO: don't use the symbol t as a variable.
    ((eq state 'b-chomped-last)
     (let ((tt (nth 0 args)))
-      (message "b-chomped-last: %s" tt)
       (yaml--frame "b-chomped-last"
         (cond ((equal tt "clip")
                ;; TODO: Fix this
@@ -1395,7 +1414,18 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 's-white) (yaml--frame "s-white" (yaml--any (yaml--parse-from-grammar 's-space) (yaml--parse-from-grammar 's-tab))))
    ((eq state 'l-keep-empty) (let ((n (nth 0 args))) (yaml--frame "l-keep-empty" (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "block-in"))) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-trail-comments n)))))))
    ((eq state 'ns-tag-prefix) (yaml--frame "ns-tag-prefix" (yaml--any (yaml--parse-from-grammar 'c-ns-local-tag-prefix) (yaml--parse-from-grammar 'ns-global-tag-prefix))))
-   ((eq state 'c-l+folded) (let ((n (nth 0 args))) (yaml--frame "c-l+folded" (yaml--all (yaml--chr ?\>) (yaml--parse-from-grammar 'c-b-block-header (yaml--state-curr-m) (yaml--state-curr-t)) (yaml--parse-from-grammar 'l-folded-content (+ n (yaml--state-curr-m)) (yaml--state-curr-t))))))
+
+   ((eq state 'c-l+folded)
+    (let ((n (nth 0 args)))
+      (yaml--frame "c-l+folded"
+        (yaml--all (yaml--chr ?\>)
+                   (yaml--parse-from-grammar 'c-b-block-header (yaml--state-curr-m) (yaml--state-curr-t))
+                   (yaml--parse-from-grammar 'l-folded-content
+                                             (max (+ n (yaml--state-curr-m)) 1)
+                                             (yaml--state-curr-t))))))
+
+   ;; BOOKMARK: c-l+folded l-folded-content should be at least 1; trom off l-trail-comments
+
    ((eq state 'ns-directive-name) (yaml--frame "ns-directive-name" (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-char)))))
    ((eq state 'b-char) (yaml--frame "b-char" (yaml--any (yaml--parse-from-grammar 'b-line-feed) (yaml--parse-from-grammar 'b-carriage-return))))
    ((eq state 'ns-plain-multi-line) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-plain-multi-line" (yaml--all (yaml--parse-from-grammar 'ns-plain-one-line c) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-ns-plain-next-line n c)))))))
@@ -1477,7 +1507,13 @@ Rules for this function are defined by the yaml-spec JSON file."
                                        (yaml--parse-from-grammar 'e-node))
                             (yaml--parse-from-grammar 'c-l-block-map-implicit-value (nth 0 args)))))
 
-   ((eq state 'l-nb-folded-lines) (let ((n (nth 0 args))) (yaml--frame "l-nb-folded-lines" (yaml--all (yaml--parse-from-grammar 's-nb-folded-text n) (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 'b-l-folded n "block-in") (yaml--parse-from-grammar 's-nb-folded-text n))))))))
+   ((eq state 'l-nb-folded-lines)
+    (let ((n (nth 0 args)))
+      (yaml--frame "l-nb-folded-lines"
+        (yaml--all (yaml--parse-from-grammar 's-nb-folded-text n)
+                   (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 'b-l-folded n "block-in")
+                                                           (yaml--parse-from-grammar 's-nb-folded-text n))))))))
+
    ((eq state 'c-l-block-map-explicit-key) (let ((n (nth 0 args))) (yaml--frame "c-l-block-map-explicit-key" (yaml--all (yaml--chr ?\?) (yaml--parse-from-grammar 's-l+block-indented n "block-out")))))
 
    ((eq state 's-separate)
