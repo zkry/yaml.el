@@ -480,9 +480,8 @@ clip: |
 keep: |+
   text
 "))
-
-  ()
-
-  )
+  (should (yaml-parse-string "block sequence:
+  - one
+  - two : three")))
 
 (provide 'yaml-tests)

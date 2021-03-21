@@ -792,7 +792,7 @@ This flag is intended for development purposes.")
              slice))
          (pre (match-string 1 slice))
          (m (length (match-string 2 slice))))
-    (if (and in-seq (not pre))
+    (if (and in-seq (= (length pre) 0))
         (when (= n -1)
           (setq m (1+ m)))
       (setq m (- m n)))
@@ -1313,11 +1313,13 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 'l-trail-comments) (let ((n (nth 0 args))) (yaml--frame "l-trail-comments" (yaml--all (yaml--parse-from-grammar 's-indent-lt n) (yaml--parse-from-grammar 'c-nb-comment-text) (yaml--parse-from-grammar 'b-comment) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment)))))))
    ((eq state 'ns-flow-map-yaml-key-entry) (let ((n (nth 0 args)) (c (nth 1 args))) (yaml--frame "ns-flow-map-yaml-key-entry" (yaml--all (yaml--parse-from-grammar 'ns-flow-yaml-node n c) (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c))) (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)) (yaml--parse-from-grammar 'e-node))))))
+
    ((eq state 's-indent)
     (let ((n (nth 0 args)))
       (message "debug: s-indent: %d %s" n (yaml--slice yaml--parsing-position))
       (yaml--frame "s-indent"
         (yaml--rep n n (lambda () (yaml--parse-from-grammar 's-space))))))
+
    ((eq state 'ns-esc-line-separator) (yaml--frame "ns-esc-line-separator" (yaml--chr ?\L)))
    ((eq state 'ns-flow-yaml-node)
     (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -1543,12 +1545,13 @@ Rules for this function are defined by the yaml-spec JSON file."
 
    ((eq state 's-l+block-indented)
     (yaml--frame "s-l+block-indented"
-                 (yaml--any (yaml--all (yaml--parse-from-grammar 's-indent (yaml--state-curr-m))
-                                       (yaml--any (yaml--parse-from-grammar 'ns-l-compact-sequence (+ (nth 0 args) (+ 1 (yaml--state-curr-m))))
-                                                  (yaml--parse-from-grammar 'ns-l-compact-mapping (+ (nth 0 args) (+ 1 (yaml--state-curr-m))))))
-                            (yaml--parse-from-grammar 's-l+block-node (nth 0 args) (nth 1 args))
-                            (yaml--all (yaml--parse-from-grammar 'e-node)
-                                       (yaml--parse-from-grammar 's-l-comments)))))
+      (let ((m (yaml--auto-detect-indent (nth 0 args))))
+        (yaml--any (yaml--all (yaml--parse-from-grammar 's-indent m)
+                              (yaml--any (yaml--parse-from-grammar 'ns-l-compact-sequence (+ (nth 0 args) (+ 1 m)))
+                                         (yaml--parse-from-grammar 'ns-l-compact-mapping (+ (nth 0 args) (+ 1 m)))))
+                   (yaml--parse-from-grammar 's-l+block-node (nth 0 args) (nth 1 args))
+                   (yaml--all (yaml--parse-from-grammar 'e-node)
+                              (yaml--parse-from-grammar 's-l-comments))))))
 
    ((eq state 'c-single-quote) (yaml--frame "c-single-quote" (yaml--chr ?\')))
    ((eq state 's-flow-line-prefix) (let ((n (nth 0 args))) (yaml--frame "s-flow-line-prefix" (yaml--all (yaml--parse-from-grammar 's-indent n) (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
