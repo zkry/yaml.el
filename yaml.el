@@ -482,17 +482,24 @@ This flag is intended for development purposes.")
     ("ns-flow-pair" . (lambda (text)
                         (yaml--add-event (yaml--mapping-end-event))))
     ("ns-plain" . (lambda (text)
-                    (let* ((replaced (replace-regexp-in-string
+                    (let* ((replaced (if (and (zerop (length yaml--state-stack))
+                                              (string-match "\\(^\\|\n\\)...$" text))
+                                         ;; Hack to not send the document parse end.
+                                         ;; Will only occur with bare ns-plain at top level.
+                                         (string-trim-right (string-trim-right text "...") "\n")
+                                       text))
+                           (replaced (replace-regexp-in-string
                                       "\\(?:[ \t]*\r?\n[ \t]*\\)"
                                       "\n"
-                                      text))
+                                      replaced))
                            (replaced (replace-regexp-in-string
                                       "\\(\n\\)\\(\n*\\)"
                                       (lambda (x)
                                         (if (> (length x) 1)
                                             (substring x 1)
                                           " "))
-                                      replaced)))
+                                      replaced))
+                           )
                       (yaml--add-event (yaml--scalar-event "plain" replaced)))))
     ("c-single-quoted" . (lambda (text)
                            (let* ((replaced (replace-regexp-in-string

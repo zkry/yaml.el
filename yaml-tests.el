@@ -181,7 +181,67 @@
 - ? earth: blue
   : moon: white
 " :object-type 'alist)
-                 [(("sun" . "yellow")) (((("earth" . "blue")) . (("moon" . "white"))))])))
+                 [(("sun" . "yellow")) (((("earth" . "blue")) . (("moon" . "white"))))]))
+
+  ;; Example 8.20. Block Node Types
+  (should (equal (yaml-parse-string "-
+  \"flow in block\"
+- >
+ Block scalar
+- !!map # Block collection
+  foo : bar
+" :object-type 'alist)
+                 ["flow in block" "Block scalar\n" (("foo" . "bar"))]))
+
+  ;; Example 8.21. Block Scalar Nodes
+  ;; TODO: The document has no new line after the literal and folded
+  ;; but since it is using default chomp, I think there should be one new line.
+  ;; Which one is right?
+  (should (equal (yaml-parse-string "literal: |2
+  value
+folded:
+   !foo
+  >1
+ value" :object-type 'alist)
+                 '(("literal" . "value\n") ("folded" . "value\n"))))
+
+  (should (equal (yaml-parse-string "sequence: !!seq
+- entry
+- !!seq
+ - nested
+mapping: !!map
+ foo: bar" :object-type 'alist)
+                 '(("sequence" . ["entry" ["nested"]])
+                   ("mapping" . (("foo" . "bar"))))))
+
+  ;; Example 9.2. Document Markers
+  (should (equal (yaml-parse-string "%YAML 1.2
+---
+Document
+...")
+                 "Document"))
+
+  ;; Example 9.3 Bare Documents
+  ;; TODO: Allow first character of bare document to be %
+  ;;   (should (equal (yaml-parse-string "%!PS-Adobe-2.0 # Not the first line
+  ;; ")))
+
+  (should (equal (yaml-parse-string "---
+{ matches
+% : 20 }
+...
+---
+# Empty
+...")
+                 "" ;; TODO: Should this be :null instead?
+                 ))
+
+  ;; Example 9.4. Explicit Documents
+  (should (equal (yaml-parse-string "---
+{ matches
+% : 20 }
+..." :object-type 'alist)
+                 '(("matches %" . 20)))))
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."
