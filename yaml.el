@@ -5,8 +5,8 @@
 ;; Author: Zachary Romero <zkry@posteo.org>
 ;; Version: 0.1.0
 ;; Homepage: https://github.com/zkry/yaml.el
-;; Package-Requires: ((emacs "25.1") (cl-lib "0.6"))
-;; Keywords: YAML
+;; Package-Requires: ((emacs "25.1"))
+;; Keywords: tools
 
 ;; yaml.el requires at least GNU Emacs 25.1
 
@@ -242,7 +242,7 @@ This flag is intended for development purposes.")
     (replace-regexp-in-string "\\(\\(?:^\\|\n\\)[^ \n][^\n]*\\)\n\\(\n+\\)\\([^\n ]\\)" "\\1\\2\\3" text)))
 
 (defun yaml--process-literal-text (text)
-  "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
+  "Remove the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
   (let* ((header-line (substring text 0 (string-match "\n" text)))
          (text-body (substring text (1+ (string-match "\n" text))))
          (parsed-header (yaml--parse-block-header header-line))
@@ -342,8 +342,8 @@ This flag is intended for development purposes.")
   "Create the data for a stream-end event."
   '(:stream-end))
 
-(defun yaml--mapping-start-event (flow)
-  "Process event indicating start of mapping according to FLOW."
+(defun yaml--mapping-start-event (_)
+  "Process event indicating start of mapping."
   ;; NOTE: currently don't have a use for FLOW
   (push :mapping yaml--state-stack)
   (push (make-hash-table :test 'equal) yaml--object-stack))
@@ -355,7 +355,7 @@ This flag is intended for development purposes.")
     (yaml--scalar-event nil obj))
   '(:mapping-end))
 
-(defun yaml--sequence-start-event (flow)
+(defun yaml--sequence-start-event (_)
   "Process event indicating start of sequence according to FLOW."
   ;; NOTE: currently don't have a use for FLOW
   (push :sequence yaml--state-stack)
@@ -379,7 +379,6 @@ This flag is intended for development purposes.")
 
  Note that VALUE may be a complex object here.  STYLE is
  currently unused."
-  (setq yaml--last-added-item value)
   (let ((top-state (car yaml--state-stack))
         (value (cond
                 ((stringp value) (yaml--resolve-scalar-tag value))
@@ -453,8 +452,7 @@ reverse order."
                          (yaml--stream-start-event)
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
-                         (setq yaml--tag-map (make-hash-table))
-                         ))
+                         (setq yaml--tag-map (make-hash-table))))
     ("c-flow-mapping" . (lambda ()
                           (yaml--mapping-start-event t)))
     ("c-flow-sequence" . (lambda ()
@@ -524,8 +522,7 @@ reverse order."
                                         (if (> (length x) 1)
                                             (substring x 1)
                                           " "))
-                                      replaced))
-                           )
+                                      replaced)))
                       (yaml--scalar-event "plain" replaced))))
     ("c-single-quoted" . (lambda (text)
                            (let* ((replaced (replace-regexp-in-string
@@ -660,8 +657,7 @@ reverse order."
       (yaml--pop-state)
       (if (not ,res-symbol)
           nil
-        (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules)))
-              (t-state (yaml--state-m (car yaml--states))))
+        (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules))))
           (cond
            ((or (assoc ,name yaml--grammar-events-in)
                 (assoc ,name yaml--grammar-events-out))
@@ -748,19 +744,20 @@ reverse order."
            (setq ,rules-sym (cdr ,rules-sym)))
          ,res-sym))))
 
-;; NOTE: the reference implementation defines may, exclude, and max as follows.
-
-(defmacro yaml--may (action)
-  action)
-
 (defmacro yaml--exclude (_)
+  "Set the excluded characters according to RULE.
+
+This is currently unimplemented."
+  ;; NOTE: This is currently not implemented.
   't)
 
 (defmacro yaml--max (_)
+  "Automatically pass."
   t)
 
 (defun yaml--empty ()
-  'empty)
+  "Return non-nil indicating that empty rule needs nothing to pass."
+  't)
 
 (defun yaml--sub (a b)
   "Return A minus B."
@@ -906,11 +903,11 @@ then check EXPR at the current position."
     `(let ((,start-symbol yaml--parsing-position)
            (_ (when (equal ,type "<=")
                 (setq yaml--parsing-position (1- yaml--parsing-position))))
-           (ok (and (>= yaml--parsing-position 0) ,expr)))
+           (,ok-symbol (and (>= yaml--parsing-position 0) ,expr)))
        (setq yaml--parsing-position ,start-symbol)
        (if (equal ,type "!")
-           (not ok)
-         ok))))
+           (not ,ok-symbol)
+         ,ok-symbol))))
 
 (defun yaml-parse-string (string &rest args)
   "Parse the YAML value in STRING.  Keyword ARGS are as follows:
@@ -1252,8 +1249,8 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 's-indent-le)
     (let ((n (nth 0 args)))
       (yaml--frame "s-indent-le"
-        (yaml--may (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
-                              (<= (length (yaml--match)) n))))))
+        (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
+                   (<= (length (yaml--match)) n)))))
 
    ((eq state 'ns-esc-carriage-return)
     (yaml--frame "ns-esc-carriage-return" (yaml--chr ?\r)))
@@ -1903,8 +1900,8 @@ Rules for this function are defined by the yaml-spec JSON file."
    ((eq state 's-indent-lt)
     (let ((n (nth 0 args)))
       (yaml--frame "s-indent-lt"
-        (yaml--may (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
-                              (< (length (yaml--match)) n))))))
+        (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
+                   (< (length (yaml--match)) n)))))
    ((eq state 'nb-single-one-line)
     (yaml--frame "nb-single-one-line"
       (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-single-char)))))
