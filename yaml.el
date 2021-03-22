@@ -214,8 +214,8 @@ This flag is intended for development purposes.")
 
 (defun yaml--chomp-text (text-body chomp)
   "Change the ending newline of TEXT-BODY based on CHOMP."
-  (cond ((eq :clip chomp) (concat (string-trim-right text-body "\n*") "\n"))
-        ((eq :strip chomp) (string-trim-right text-body "\n*"))
+  (cond ((eq :clip chomp) (concat (replace-regexp-in-string "\n*$" "" text-body) "\n"))
+        ((eq :strip chomp) (replace-regexp-in-string "\n*$" "" text-body))
         ((eq :keep chomp) text-body)))
 
 (defun yaml--process-folded-text (text)
@@ -398,7 +398,7 @@ This flag is intended for development purposes.")
       (let ((comment-text (pop yaml--object-stack)))
         (unless (stringp value)
           (error "Trail-comments can't be nested under non-string"))
-        (yaml--scalar-event style (string-trim-right value (concat (regexp-quote comment-text) "\n*$"))))
+        (yaml--scalar-event style (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*$") "" value )))
       (pop yaml--state-stack))
      ((equal top-state nil))))
   '(:scalar))
@@ -485,7 +485,7 @@ This flag is intended for development purposes.")
                                               (string-match "\\(^\\|\n\\)...$" text))
                                          ;; Hack to not send the document parse end.
                                          ;; Will only occur with bare ns-plain at top level.
-                                         (string-trim-right (string-trim-right text "...") "\n")
+                                         (replace-regexp-in-string "\\(^\\|\n\\)...$" "" text)
                                        text))
                            (replaced (replace-regexp-in-string
                                       "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -577,7 +577,7 @@ This flag is intended for development purposes.")
                       (when (equal (car yaml--state-stack) :trail-comments)
                         (pop yaml--state-stack)
                         (let ((comment-text (pop yaml--object-stack)))
-                          (setq text (string-trim-right text (concat (regexp-quote comment-text) "\n*$")))))
+                          (setq text (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*$") "" text))))
                       (let* ((processed-text (yaml--process-folded-text text)))
                         (yaml--scalar-event "folded" processed-text))))
     ("e-scalar" . (lambda (text)
