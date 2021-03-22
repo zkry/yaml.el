@@ -32,6 +32,7 @@
 
 (require 'subr-x)
 (require 'seq)
+(require 'cl-lib)
 
 (defvar yaml--parse-debug nil
   "Turn on debugging messages when parsing YAML when non-nil.
@@ -598,7 +599,7 @@ This flag is intended for development purposes.")
     (if (stringp (car tree))
         (let ((grammar-rule (car tree))
               (text (cadr tree))
-              (children (caddr tree)))
+              (children (cl-caddr tree)))
           (let ((in-fn (cdr (assoc grammar-rule yaml--grammar-events-in)))
                 (out-fn (cdr (assoc grammar-rule yaml--grammar-events-out))))
             (when in-fn
