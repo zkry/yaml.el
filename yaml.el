@@ -1,12 +1,14 @@
 ;;; yaml.el --- YAML parser for Elisp -*- lexical-binding: t -*-
 
-;; Author: Zachary Romero
-;; Maintainer: Zachary Romero
+;; Copyright © 2021 Zachary Romero <zkry@posteo.org>
+
+;; Author: Zachary Romero <zkry@posteo.org>
 ;; Version: 0.1.0
-;; Package-Requires: ()
 ;; Homepage: https://github.com/zkry/yaml.el
+;; Package-Requires: ((emacs "25.1") (cl-lib "0.6"))
 ;; Keywords: YAML
 
+;; yaml.el requires at least GNU Emacs 25.1
 
 ;; This file is not part of GNU Emacs
 
@@ -26,7 +28,11 @@
 
 ;;; Commentary:
 
-;; YAML parser in Elisp.
+;; yaml.el contains the code for parsing YAML natively in Elisp with
+;; no dependencies.  Rules for the grammar were generated from the
+;; YAML Projects JSON version of the grammar spec
+;; (https://github.com/yaml/yaml-grammar) via the 'grammargen.bb'
+;; script.
 
 ;;; Code:
 
@@ -174,7 +180,7 @@ This flag is intended for development purposes.")
   '(("ns-plain" . literal))
   "Alist determining how to resolve grammar rule.")
 
-;; Receiver Functions ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Receiver Functions
 
 (defvar yaml--document-start-version nil)
 (defvar yaml--document-start-explicit nil)
@@ -183,13 +189,16 @@ This flag is intended for development purposes.")
 (defvar yaml--tag-handle nil)
 (defvar yaml--document-end nil)
 
-(defvar yaml--cache nil)
-(defvar yaml--object-stack nil)
+(defvar yaml--cache nil
+  "Stack of data for temporary calculations.")
+(defvar yaml--object-stack nil
+  "Stack of objects currently being build.")
 (defvar yaml--state-stack nil
   "The state that the YAML parser is with regards to incoming events.")
 (defvar yaml--root nil)
 
-(defvar yaml--anchor-mappings nil)
+(defvar yaml--anchor-mappings nil
+  "Hashmap containing the anchor mappings of the current parsing run.")
 (defvar yaml--resolve-aliases nil
   "Flag determining if the event processing should attempt to resolve aliases.")
 
@@ -249,7 +258,9 @@ This flag is intended for development purposes.")
          (text-body (string-join striped-lines "\n")))
     (yaml--chomp-text text-body chomp)))
 
+;; TODO: Process tags and use them in this function.
 (defun yaml--resolve-scalar-tag (scalar)
+  "Convert a SCALAR string to it's corresponding object."
   (cond
    ;; tag:yaml.org,2002:null
    ((or (equal "null" scalar)
@@ -315,7 +326,7 @@ This flag is intended for development purposes.")
    (t hash-table)))
 
 (defun yaml--format-list (l)
-  "Convert HASH-TABLE to alist of plist if specified."
+  "Convert L to array if specified."
   (cond
    ((equal yaml--parsing-sequence-type 'list)
     l)
@@ -331,39 +342,43 @@ This flag is intended for development purposes.")
   "Create the data for a stream-end event."
   '(:stream-end))
 
-(defun yaml--document-start-event (explicit)
-  '(:document-start))
-(defun yaml--document-end-event (explicit)
-  '(:document-end))
-
 (defun yaml--mapping-start-event (flow)
+  "Process event indicating start of mapping according to FLOW."
+  ;; NOTE: currently don't have a use for FLOW
   (push :mapping yaml--state-stack)
-  (push (make-hash-table :test 'equal) yaml--object-stack)
-  '(:mapping-start))
+  (push (make-hash-table :test 'equal) yaml--object-stack))
 
 (defun yaml--mapping-end-event ()
+  "Process event indicating end of mapping."
   (pop yaml--state-stack)
   (let ((obj (pop yaml--object-stack)))
-    ;; TODO: Perhaps separate the logic here.
     (yaml--scalar-event nil obj))
   '(:mapping-end))
 
 (defun yaml--sequence-start-event (flow)
+  "Process event indicating start of sequence according to FLOW."
+  ;; NOTE: currently don't have a use for FLOW
   (push :sequence yaml--state-stack)
   (push nil yaml--object-stack)
   '(:sequence-start))
 
 (defun yaml--sequence-end-event ()
+  "Process event indicating end of sequence."
   (pop yaml--state-stack)
   (let ((obj (pop yaml--object-stack)))
     (yaml--scalar-event nil obj))
   '(:sequence-end))
 
 (defun yaml--anchor-event (name)
+  "Process event indicating an anchor has been defined with NAME."
   (push :anchor yaml--state-stack)
   (push `(:anchor ,name) yaml--object-stack))
 
 (defun yaml--scalar-event (style value)
+  "Process the completion of a scalar VALUE.
+
+ Note that VALUE may be a complex object here.  STYLE is
+ currently unused."
   (setq yaml--last-added-item value)
   (let ((top-state (car yaml--state-stack))
         (value (cond
@@ -405,6 +420,7 @@ This flag is intended for development purposes.")
   '(:scalar))
 
 (defun yaml--alias-event (name)
+  "Process a node has been defined via alias NAME."
   (if yaml--resolve-aliases
       (let ((resolved (gethash name yaml--anchor-mappings)))
         (unless resolved (error "Undefined alias '%s'" name))
@@ -413,14 +429,23 @@ This flag is intended for development purposes.")
   '(:alias))
 
 (defun yaml--trail-comments-event (text)
+  "Process trailing comments of TEXT which should be trimmed from parent."
   (push :trail-comments yaml--state-stack)
   (push text yaml--object-stack)
   '(:trail-comments))
 
-(defun yaml--check-document-start () t)
-(defun yaml--check-document-end () t)
 
-(defun yaml--revers-at-list ()
+
+(defun yaml--check-document-end ()
+  "Return non-nil if at end of document."
+  ;; NOTE: currently no need for this.  May be needed in the future.
+  t)
+
+(defun yaml--reverse-at-list ()
+  "Reverse the list at the top of the object stack.
+
+This is needed to get the correct order as lists are processed in
+reverse order."
   (setcar yaml--object-stack (reverse (car yaml--object-stack))))
 
 (defconst yaml--grammar-events-in
@@ -429,7 +454,7 @@ This flag is intended for development purposes.")
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
                          (setq yaml--tag-map (make-hash-table))
-                         (yaml--document-start-event nil)))
+                         ))
     ("c-flow-mapping" . (lambda ()
                           (yaml--mapping-start-event t)))
     ("c-flow-sequence" . (lambda ()
@@ -443,7 +468,8 @@ This flag is intended for development purposes.")
     ("ns-l-compact-sequence" . (lambda ()
                                  (yaml--sequence-start-event nil)))
     ("ns-flow-pair" . (lambda ()
-                        (yaml--mapping-start-event t)))))
+                        (yaml--mapping-start-event t))))
+  "List of functions for matched rules that run on the entering of a rule.")
 
 (defconst yaml--grammar-events-out
   '(("c-b-block-header" . (lambda (text)
@@ -473,7 +499,7 @@ This flag is intended for development purposes.")
     ("l+block-mapping" . (lambda (text)
                            (yaml--mapping-end-event)))
     ("l+block-sequence" . (lambda (text)
-                            (yaml--revers-at-list)
+                            (yaml--reverse-at-list)
                             (yaml--sequence-end-event)))
     ("ns-l-compact-mapping" . (lambda (text)
                                 (yaml--mapping-end-event)))
@@ -586,12 +612,13 @@ This flag is intended for development purposes.")
     ("c-ns-anchor-property" . (lambda (text)
                                 (yaml--anchor-event (substring text 1))))
     ("c-ns-tag-property" . (lambda (text)
-                             ;; (error "not implemented: %s" text)
+                             ;; TODO: Implement tags
                              ))
     ("l-trail-comments" . (lambda (text)
                             (yaml--trail-comments-event text)))
     ("c-ns-alias-node" . (lambda (text)
-                          (yaml--alias-event (substring text 1))))))
+                           (yaml--alias-event (substring text 1)))))
+  "List of functions for matched rules that run on the exiting of a rule.")
 
 (defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
@@ -721,20 +748,18 @@ This flag is intended for development purposes.")
            (setq ,rules-sym (cdr ,rules-sym)))
          ,res-sym))))
 
+;; NOTE: the reference implementation defines may, exclude, and max as follows.
 
 (defmacro yaml--may (action)
   action)
 
 (defmacro yaml--exclude (_)
-  "Return non-nil."
   't)
 
 (defmacro yaml--max (_)
-  "Return non-nil."
   t)
 
 (defun yaml--empty ()
-  "Return non-nil."
   'empty)
 
 (defun yaml--sub (a b)
@@ -742,7 +767,7 @@ This flag is intended for development purposes.")
   (- a b))
 
 (defun yaml--match ()
-  ""
+  "Return the content of the previous sibling completed."
   (let* ((states yaml--states)
          (res nil))
     (while (and states (not res))
@@ -858,7 +883,6 @@ This flag is intended for development purposes.")
 
 (defun yaml--top ()
   "Perform top level YAML parsing rule."
-  ;;(yaml-l-yaml-stream)
   (yaml--parse-from-grammar 'l-yaml-stream))
 
 (defmacro yaml--set (variable value)
@@ -947,9 +971,6 @@ value.  It defaults to the symbol :false."
         (setq yaml--resolve-aliases t)
         (yaml--walk-events res)
         yaml--root))))
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun yaml--parse-from-grammar (state &rest args)
   "Parse YAML grammar for given STATE and ARGS.

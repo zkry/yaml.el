@@ -33,6 +33,8 @@ You can put yaml.el in you load path directly or use a tool like use-package or 
 ## Examples
 
 ``` emacs-lisp
+(require 'yaml)
+
 (yaml-parse-string "
 recipe:
   ingredients:
