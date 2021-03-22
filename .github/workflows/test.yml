@@ -14,7 +14,7 @@ jobs:
         emacs -Q --batch -L . -l *-tests.el -f ert-run-tests-batch-and-exit
     - uses: purcell/setup-emacs@master
       with:
-        version: 24.4
+        version: 25.1
     - name: Run tests
       run: |
         emacs -Q --batch -L . -l *-tests.el -f ert-run-tests-batch-and-exit
