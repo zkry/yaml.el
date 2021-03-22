@@ -54,9 +54,12 @@ This flag is intended for development purposes.")
                                 "c-printable"
                                 "b-as-space"))
 
-(defvar yaml--parsing-input "")
-(defvar yaml--parsing-position 0)
-(defvar yaml--states nil)
+(defvar yaml--parsing-input ""
+  "The string content of the current item being processed.")
+(defvar yaml--parsing-position 0
+  "The position that the parser is currently looking at.")
+(defvar yaml--states nil
+  "Stack of parsing states.")
 
 (defvar yaml--parsing-object-type nil)
 (defvar yaml--parsing-sequence-type nil)
@@ -177,7 +180,6 @@ This flag is intended for development purposes.")
 (defvar yaml--document-end-explicit nil)
 (defvar yaml--tag-map nil)
 (defvar yaml--tag-handle nil)
-(defvar yaml--anchor nil)
 (defvar yaml--document-end nil)
 
 (defvar yaml--cache nil)
@@ -187,7 +189,8 @@ This flag is intended for development purposes.")
 (defvar yaml--root nil)
 
 (defvar yaml--anchor-mappings nil)
-(defvar yaml--resolve-aliases nil)
+(defvar yaml--resolve-aliases nil
+  "Flag determining if the event processing should attempt to resolve aliases.")
 
 (defun yaml--parse-block-header (header)
   "Parse the HEADER string returning chomping style and indent count."
@@ -319,10 +322,6 @@ This flag is intended for development purposes.")
     (apply #'vector l))
    (t l)))
 
-(defun yaml--add-event (e)
-  "Add event E."
-  nil)
-
 (defun yaml--stream-start-event ()
   "Create the data for a stream-start event."
   '(:stream-start))
@@ -424,33 +423,33 @@ This flag is intended for development purposes.")
   (setcar yaml--object-stack (reverse (car yaml--object-stack))))
 
 (defconst yaml--grammar-events-in
-  '(("l-yaml-stream" . (lambda () ;; TODO remvoe yaml--add-event
-                         (yaml--add-event (yaml--stream-start-event))
+  '(("l-yaml-stream" . (lambda ()
+                         (yaml--stream-start-event)
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
                          (setq yaml--tag-map (make-hash-table))
-                         (yaml--add-event (yaml--document-start-event nil))))
+                         (yaml--document-start-event nil)))
     ("c-flow-mapping" . (lambda ()
-                          (yaml--add-event (yaml--mapping-start-event t))))
+                          (yaml--mapping-start-event t)))
     ("c-flow-sequence" . (lambda ()
-                           (yaml--add-event (yaml--sequence-start-event nil))))
+                           (yaml--sequence-start-event nil)))
     ("l+block-mapping" . (lambda ()
-                           (yaml--add-event (yaml--mapping-start-event nil))))
+                           (yaml--mapping-start-event nil)))
     ("l+block-sequence" . (lambda ()
-                            (yaml--add-event (yaml--sequence-start-event nil))))
+                            (yaml--sequence-start-event nil)))
     ("ns-l-compact-mapping" . (lambda ()
-                                (yaml--add-event (yaml--mapping-start-event nil))))
+                                (yaml--mapping-start-event nil)))
     ("ns-l-compact-sequence" . (lambda ()
-                                 (yaml--add-event (yaml--sequence-start-event nil))))
+                                 (yaml--sequence-start-event nil)))
     ("ns-flow-pair" . (lambda ()
-                        (yaml--add-event (yaml--mapping-start-event t))))))
+                        (yaml--mapping-start-event t)))))
 
 (defconst yaml--grammar-events-out
   '(("c-b-block-header" . (lambda (text)
                             nil))
     ("l-yaml-stream" . (lambda (text)
                          (yaml--check-document-end)
-                         (yaml--add-event (yaml--stream-end-event))))
+                         (yaml--stream-end-event)))
     ("ns-yaml-version" . (lambda (text)
                            (when yaml--document-start-version
                              (throw 'error "Multiple %YAML directives not allowed."))
@@ -467,20 +466,20 @@ This flag is intended for development purposes.")
                             (setq yaml--document-end-explicit t))
                           (yaml--check-document-end)))
     ("c-flow-mapping" . (lambda (text)
-                          (yaml--add-event (yaml--mapping-end-event))))
+                          (yaml--mapping-end-event)))
     ("c-flow-sequence" . (lambda (text)
-                           (yaml--add-event (yaml--sequence-end-event ))))
+                           (yaml--sequence-end-event )))
     ("l+block-mapping" . (lambda (text)
-                           (yaml--add-event (yaml--mapping-end-event))))
+                           (yaml--mapping-end-event)))
     ("l+block-sequence" . (lambda (text)
                             (yaml--revers-at-list)
-                            (yaml--add-event (yaml--sequence-end-event))))
+                            (yaml--sequence-end-event)))
     ("ns-l-compact-mapping" . (lambda (text)
-                                (yaml--add-event (yaml--mapping-end-event))))
+                                (yaml--mapping-end-event)))
     ("ns-l-compact-sequence" . (lambda (text)
-                                 (yaml--add-event (yaml--sequence-end-event))))
+                                 (yaml--sequence-end-event)))
     ("ns-flow-pair" . (lambda (text)
-                        (yaml--add-event (yaml--mapping-end-event))))
+                        (yaml--mapping-end-event)))
     ("ns-plain" . (lambda (text)
                     (let* ((replaced (if (and (zerop (length yaml--state-stack))
                                               (string-match "\\(^\\|\n\\)...$" text))
@@ -500,7 +499,7 @@ This flag is intended for development purposes.")
                                           " "))
                                       replaced))
                            )
-                      (yaml--add-event (yaml--scalar-event "plain" replaced)))))
+                      (yaml--scalar-event "plain" replaced))))
     ("c-single-quoted" . (lambda (text)
                            (let* ((replaced (replace-regexp-in-string
                                              "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -520,7 +519,7 @@ This flag is intended for development purposes.")
                                                    (substring x 1)
                                                  "'"))
                                             replaced)))
-                             (yaml--add-event (yaml--scalar-event "single" (substring replaced 1 (1- (length replaced))))))))
+                             (yaml--scalar-event "single" (substring replaced 1 (1- (length replaced)))))))
     ("c-double-quoted" . (lambda (text)
                            (let* ((replaced (replace-regexp-in-string
                                              "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -570,28 +569,28 @@ This flag is intended for development purposes.")
                                              "\\"
                                              replaced))
                                   (replaced (substring replaced 1 (1- (length replaced)))))
-                             (yaml--add-event (yaml--scalar-event "double" replaced)))))
+                             (yaml--scalar-event "double" replaced))))
     ("c-l+literal" . (lambda (text)
                        (let* ((processed-text (yaml--process-literal-text text)))
-                         (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
+                         (yaml--scalar-event "folded" processed-text))))
     ("c-l+folded" . (lambda (text)
                       (when (equal (car yaml--state-stack) :trail-comments)
                         (pop yaml--state-stack)
                         (let ((comment-text (pop yaml--object-stack)))
                           (setq text (string-trim-right text (concat (regexp-quote comment-text) "\n*$")))))
                       (let* ((processed-text (yaml--process-folded-text text)))
-                        (yaml--add-event (yaml--scalar-event "folded" processed-text)))))
+                        (yaml--scalar-event "folded" processed-text))))
     ("e-scalar" . (lambda (text)
-                    (yaml--add-event (yaml--scalar-event "plain" "null"))))
+                    (yaml--scalar-event "plain" "null")))
     ("c-ns-anchor-property" . (lambda (text)
                                 (yaml--anchor-event (substring text 1))))
     ("c-ns-tag-property" . (lambda (text)
                              ;; (error "not implemented: %s" text)
                              ))
     ("l-trail-comments" . (lambda (text)
-                            (yaml--add-event (yaml--trail-comments-event text))))
+                            (yaml--trail-comments-event text)))
     ("c-ns-alias-node" . (lambda (text)
-                           (yaml--add-event (yaml--alias-event (substring text 1)))))))
+                          (yaml--alias-event (substring text 1))))))
 
 (defun yaml--walk-events (tree)
   "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
@@ -681,22 +680,6 @@ This flag is intended for development purposes.")
       nil
     (setq yaml--parsing-position (1+ yaml--parsing-position))
     t))
-
-(defun yaml--run-all (&rest funcs)
-  "Return list of all evaluated FUNCS if all of FUNCS pass."
-  (let* ((start-pos yaml--parsing-position)
-         (ress '())
-         (res (catch 'break
-                (while funcs
-                  (let ((res (funcall (car funcs))))
-                    (when (not res)
-                      (throw 'break nil))
-                    (setq ress (append ress (list res)))
-                    (setq funcs (cdr funcs))))
-                ress)))
-    (unless res
-      (setq yaml--parsing-position start-pos))
-    res))
 
 (defun yaml--run-all (&rest funcs)
   "Return list of all evaluated FUNCS if all of FUNCS pass."
@@ -810,7 +793,6 @@ This flag is intended for development purposes.")
   (or (>= yaml--parsing-position (length yaml--parsing-input))
       (and (yaml--state-curr-doc)
            (yaml--start-of-line)
-           ;; TODO Test this Regex
            (string-match "\\^g(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)" (substring yaml--parsing-input yaml--parsing-position)))))
 
 (defun yaml--ord (f)
@@ -957,10 +939,13 @@ value.  It defaults to the symbol :false."
                        (length yaml--parsing-input))))
       (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
       (yaml--walk-events res)
-      (setq yaml--root nil)
-      (setq yaml--resolve-aliases t)
-      (yaml--walk-events res)
-      yaml--root)))
+      (if (zerop (hash-table-count yaml--anchor-mappings))
+          yaml--root
+        ;; Run event processing twice to resolve aliases.
+        (setq yaml--root nil)
+        (setq yaml--resolve-aliases t)
+        (yaml--walk-events res)
+        yaml--root))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

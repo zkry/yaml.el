@@ -223,8 +223,7 @@ Document
 
   ;; Example 9.3 Bare Documents
   ;; TODO: Allow first character of bare document to be %
-  ;;   (should (equal (yaml-parse-string "%!PS-Adobe-2.0 # Not the first line
-  ;; ")))
+  ;;   (should (equal (yaml-parse-string "%!PS-Adobe-2.0 # Not the first line\n")))
 
   (should (equal (yaml-parse-string "---
 { matches
