@@ -1202,11 +1202,11 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args))
            (c (nth 1 args)))
        (yaml--frame "ns-plain"
-         (cond
-          ((equal c "block-key") (yaml--parse-from-grammar 'ns-plain-one-line c))
-          ((equal c "flow-in") (yaml--parse-from-grammar 'ns-plain-multi-line n c))
-          ((equal c "flow-key") (yaml--parse-from-grammar 'ns-plain-one-line c))
-          ((equal c "flow-out") (yaml--parse-from-grammar 'ns-plain-multi-line n c))))))
+         (pcase c
+           ("block-key" (yaml--parse-from-grammar 'ns-plain-one-line c))
+           ("flow-in" (yaml--parse-from-grammar 'ns-plain-multi-line n c))
+           ("flow-key" (yaml--parse-from-grammar 'ns-plain-one-line c))
+           ("flow-out" (yaml--parse-from-grammar 'ns-plain-multi-line n c))))))
 
     ('c-printable
      (yaml--frame "c-printable"
@@ -1262,10 +1262,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('nb-single-text
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "nb-single-text"
-         (cond ((equal c "block-key") (yaml--parse-from-grammar 'nb-single-one-line))
-               ((equal c "flow-in") (yaml--parse-from-grammar 'nb-single-multi-line n))
-               ((equal c "flow-key") (yaml--parse-from-grammar 'nb-single-one-line))
-               ((equal c "flow-out") (yaml--parse-from-grammar 'nb-single-multi-line n))))))
+         (pcase c
+           ("block-key" (yaml--parse-from-grammar 'nb-single-one-line))
+           ("flow-in" (yaml--parse-from-grammar 'nb-single-multi-line n))
+           ("flow-key" (yaml--parse-from-grammar 'nb-single-one-line))
+           ("flow-out" (yaml--parse-from-grammar 'nb-single-multi-line n))))))
 
     ('s-indent-le
      (let ((n (nth 0 args)))
@@ -1280,9 +1281,10 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args))
            (tt (nth 1 args)))
        (yaml--frame "l-chomped-empty"
-         (cond ((equal tt "clip") (yaml--parse-from-grammar 'l-strip-empty n))
-               ((equal tt "keep") (yaml--parse-from-grammar 'l-keep-empty n))
-               ((equal tt "strip") (yaml--parse-from-grammar 'l-strip-empty n))))))
+         (pcase tt
+           ("clip" (yaml--parse-from-grammar 'l-strip-empty n))
+           ("keep" (yaml--parse-from-grammar 'l-keep-empty n))
+           ("strip" (yaml--parse-from-grammar 'l-strip-empty n))))))
 
     ('c-s-implicit-json-key
      (let ((c (nth 0 args)))
@@ -1331,16 +1333,17 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('b-chomped-last
      (let ((tt (nth 0 args)))
        (yaml--frame "b-chomped-last"
-         (cond ((equal tt "clip")
-                ;; TODO: Fix this
-                (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
-                           (yaml--end-of-stream)))
-               ((equal tt "keep")
-                (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
-                           (yaml--end-of-stream)))
-               ((equal tt "strip")
-                (yaml--any (yaml--parse-from-grammar 'b-non-content)
-                           (yaml--end-of-stream)))))))
+         (pcase tt
+           ("clip"
+            ;; TODO: Fix this
+            (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
+                       (yaml--end-of-stream)))
+           ("keep"
+            (yaml--any (yaml--parse-from-grammar 'b-as-line-feed)
+                       (yaml--end-of-stream)))
+           ("strip"
+            (yaml--any (yaml--parse-from-grammar 'b-non-content)
+                       (yaml--end-of-stream)))))))
 
     ('l-trail-comments
      (let ((n (nth 0 args)))
@@ -1549,8 +1552,9 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('seq-spaces
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "seq-spaces"
-         (cond ((equal c "block-in") n)
-               ((equal c "block-out") (yaml--sub n 1))))))
+         (pcase c
+           ("block-in" n)
+           ("block-out" (yaml--sub n 1))))))
 
     ('l-yaml-stream
      (yaml--frame "l-yaml-stream"
@@ -1741,10 +1745,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('nb-double-text
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "nb-double-text"
-         (cond ((equal c "block-key") (yaml--parse-from-grammar 'nb-double-one-line))
-               ((equal c "flow-in") (yaml--parse-from-grammar 'nb-double-multi-line n))
-               ((equal c "flow-key") (yaml--parse-from-grammar 'nb-double-one-line))
-               ((equal c "flow-out") (yaml--parse-from-grammar 'nb-double-multi-line n))))))
+         (pcase c
+           ("block-key" (yaml--parse-from-grammar 'nb-double-one-line))
+           ("flow-in" (yaml--parse-from-grammar 'nb-double-multi-line n))
+           ("flow-key" (yaml--parse-from-grammar 'nb-double-one-line))
+           ("flow-out" (yaml--parse-from-grammar 'nb-double-multi-line n))))))
 
     ('s-b-comment
      (yaml--frame "s-b-comment"
@@ -1887,12 +1892,13 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args))
            (c (nth 1 args)))
        (yaml--frame "s-separate"
-         (cond ((equal c "block-in") (yaml--parse-from-grammar 's-separate-lines n))
-               ((equal c "block-key") (yaml--parse-from-grammar 's-separate-in-line))
-               ((equal c "block-out") (yaml--parse-from-grammar 's-separate-lines n))
-               ((equal c "flow-in") (yaml--parse-from-grammar 's-separate-lines n))
-               ((equal c "flow-key") (yaml--parse-from-grammar 's-separate-in-line))
-               ((equal c "flow-out") (yaml--parse-from-grammar 's-separate-lines n))))))
+         (pcase c
+           ("block-in" (yaml--parse-from-grammar 's-separate-lines n))
+           ("block-key" (yaml--parse-from-grammar 's-separate-in-line))
+           ("block-out" (yaml--parse-from-grammar 's-separate-lines n))
+           ("flow-in" (yaml--parse-from-grammar 's-separate-lines n))
+           ("flow-key" (yaml--parse-from-grammar 's-separate-in-line))
+           ("flow-out" (yaml--parse-from-grammar 's-separate-lines n))))))
 
     ('ns-flow-pair-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -1943,10 +1949,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-line-prefix
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "s-line-prefix"
-         (cond ((equal c "block-in") (yaml--parse-from-grammar 's-block-line-prefix n))
-               ((equal c "block-out") (yaml--parse-from-grammar 's-block-line-prefix n))
-               ((equal c "flow-in") (yaml--parse-from-grammar 's-flow-line-prefix n))
-               ((equal c "flow-out") (yaml--parse-from-grammar 's-flow-line-prefix n))))))
+         (pcase c
+           ("block-in" (yaml--parse-from-grammar 's-block-line-prefix n))
+           ("block-out" (yaml--parse-from-grammar 's-block-line-prefix n))
+           ("flow-in" (yaml--parse-from-grammar 's-flow-line-prefix n))
+           ("flow-out" (yaml--parse-from-grammar 's-flow-line-prefix n))))))
 
     ('s-tab
      (yaml--frame "s-tab" (yaml--chr ?\x09)))
@@ -2275,10 +2282,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-plain-safe
      (let ((c (nth 0 args)))
        (yaml--frame "ns-plain-safe"
-         (cond ((equal c "block-key") (yaml--parse-from-grammar 'ns-plain-safe-out))
-               ((equal c "flow-in") (yaml--parse-from-grammar 'ns-plain-safe-in))
-               ((equal c "flow-key") (yaml--parse-from-grammar 'ns-plain-safe-in))
-               ((equal c "flow-out") (yaml--parse-from-grammar 'ns-plain-safe-out))))))
+         (pcase c
+           ("block-key" (yaml--parse-from-grammar 'ns-plain-safe-out))
+           ("flow-in" (yaml--parse-from-grammar 'ns-plain-safe-in))
+           ("flow-key" (yaml--parse-from-grammar 'ns-plain-safe-in))
+           ("flow-out" (yaml--parse-from-grammar 'ns-plain-safe-out))))))
 
     ('ns-flow-content
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -2298,10 +2306,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('in-flow
      (let ((c (nth 0 args)))
        (yaml--frame "in-flow"
-         (cond ((equal c "block-key") "flow-key")
-               ((equal c "flow-in") "flow-in")
-               ((equal c "flow-key") "flow-key")
-               ((equal c "flow-out") "flow-in")))))
+         (pcase c
+           ("block-key" "flow-key")
+           ("flow-in" "flow-in")
+           ("flow-key" "flow-key")
+           ("flow-out" "flow-in")))))
 
     ('c-verbatim-tag
      (yaml--frame "c-verbatim-tag"
@@ -2332,7 +2341,7 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-yaml-content"
          (yaml--parse-from-grammar 'ns-plain n c))))
-    (t (error "Unknown parsing grammar state: %s %s" state args))))
+    (_ (error "Unknown parsing grammar state: %s %s" state args))))
 
 (provide 'yaml)
 
