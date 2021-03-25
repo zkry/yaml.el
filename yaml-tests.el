@@ -131,6 +131,16 @@
   strip")
                  ["literal\n" " folded\n" "keep\n\n" " strip"]))
 
+  ;; Example 8.5
+  (should (equal (yaml-parse-string " # Strip
+  # Comments:
+strip: |-
+   # text
+\s\s
+ # Clip
+  # comments:" :object-type 'alist)
+                 '(("strip" . "# text"))))
+
   (should (equal (yaml-parse-string ">
 
  folded
@@ -149,6 +159,7 @@
 # Comment")
 
                  "\nfolded line\nnext line\n  * bullet\n\n  * list\n  * lines\n\nlast line\n"))
+
   (should (equal (yaml-parse-string "- # Empty
 - abc")
                  [:null "abc"]))
@@ -259,7 +270,68 @@ Document
 { matches
 % : 20 }
 ..." :object-type 'alist)
-                 '(("matches %" . 20)))))
+                 '(("matches %" . 20))))
+
+  (should (equal (yaml-parse-string "strip: |-
+   beep
+  # text" :object-type 'alist)
+                 '(("strip" . "beep"))))
+
+  (should (equal (yaml-parse-string "
+- one: |
+   hey
+- two" :object-type 'alist)
+                 [(("one" . "hey\n"))
+                  "two"]))
+
+  (should (equal (yaml-parse-string "
+one:
+     note: |-
+      this is a note
+     two: three" :object-type 'alist)
+                 '(("one" . (("note" . "this is a note")
+                             ("two" . "three"))))))
+
+  (should (equal (yaml-parse-string "key: |-
+   # not
+   # a
+   # comment
+  # these
+ # are
+# all
+# comments" :object-type 'alist)
+                 '(("key" . "# not\n# a\n# comment"))))
+  (should (equal (yaml-parse-string "
+abc:
+  key-1: |-
+   # not
+   # a
+   # comment
+  key-2: [1, 2, \"three\"]
+  key-3:
+      - deeply
+      - |
+         nested
+  # these
+ # are
+# all
+# comments" :object-type 'alist)
+                 '(("abc" ("key-1" . "# not
+# a
+# comment") ("key-2" . [1 2 "three"]) ("key-3" . ["deeply" "nested
+"])))))
+
+  (should (equal (yaml-parse-string "
+key-1: |-2
+    ---
+    ---
+key-2: |2-
+    ---
+    ---"
+                                    :object-type 'alist)
+                 '(("key-1" . "  ---\n  ---")
+                   ("key-2" . "  ---\n  ---")))))
+
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."
@@ -272,7 +344,7 @@ Document
   (should (yaml-parse-string "{ ? !!str : !!str }"))
   (should (yaml-parse-string "{ ? : }"))
   (should (yaml-parse-string "{ ? !!str \"one\" : \"two\"}"))
-  (should (let ((max-lisp-eval-depth 1000))
+  (should (let ((max-lisp-eval-depth 1050))
             (yaml-parse-string
              "apiVersion: apps/v1
 kind: Deployment
@@ -371,8 +443,17 @@ keep: |+
   - one
   - two : three"))
   (should (yaml-parse-string "- # Empty
-- abc")))
+- abc"))
 
+  ;; The following tests make sure long strings don't blow up the stack when trying to traverse the tree.
+  (should (yaml-parse-string "oarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoar
+# beep" :object-type 'alist))
+  (should (yaml-parse-string "'oarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoar'
+# beep" :object-type 'alist))
+  (should (yaml-parse-string "\"oarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoar\"
+# beep" :object-type 'alist))
+  (should (yaml-parse-string "|\n oarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoaroarsietnaorsetnaorstnearsotnarsoitneiaosretnaoirsetnaorsentaorsentoar
+# beep" :object-type 'alist)))
 
 
 (provide 'yaml-tests)
