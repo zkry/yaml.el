@@ -969,9 +969,9 @@ value.  It defaults to the symbol :false."
                  (yaml--top))))
 
       (when (< yaml--parsing-position (length yaml--parsing-input))
-        (error (format "parser finished before end of input %s/%s"
-                       yaml--parsing-position
-                       (length yaml--parsing-input))))
+        (error "Unable to parse YAML stream.  Parser finished before end of input %s/%s"
+               yaml--parsing-position
+               (length yaml--parsing-input)))
       (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
       (yaml--walk-events res)
       (if (zerop (hash-table-count yaml--anchor-mappings))
