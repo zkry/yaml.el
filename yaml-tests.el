@@ -456,6 +456,57 @@ keep: |+
 # beep" :object-type 'alist)))
 
 
+(defun yaml-test-round-trip (o)
+  "Test (equal (decode (encode o)) o)"
+  (let* ((encoded (yaml-encode o))
+         (parsed (yaml-parse-string encoded
+                                    :object-type 'alist
+                                    :sequence-type 'list))
+         (encoded-2 (yaml-encode o)))
+    (equal encoded encoded-2)))
+
+(ert-deftest yaml-encode-tests ()
+  (should (yaml-test-round-trip 1))
+  (should (yaml-test-round-trip "one"))
+  (should (yaml-test-round-trip nil))
+  (should (yaml-test-round-trip '(1 2 3)))
+  (should (yaml-test-round-trip '((1 . 2) (3 . 4) (5 . 6))))
+  (should (yaml-test-round-trip
+           '(("key" . "value")
+             ("nested-map" . ((1 . 2) (3 . 4) (5 . 6))))))
+  (should (yaml-test-round-trip
+           '("one"
+             (("key" . "value")
+              ("nested-map" . ((1 . 2) (3 . 4) (5 . 6))))
+             "three")))
+  (should (yaml-test-round-trip
+           '("one"
+             (("key" . "value")
+              ("nested-map" . ((1 . 2) (3 . 4) (5 . 6))))
+             "three")))
+  (should (yaml-test-round-trip
+           '("one"
+             (("key" . "value")
+              ("nested-map" . ((1 . 2) (3 . 4) (5 . 6))))
+             ("nested" "list" 1 2 3))))
+  (should (yaml-test-round-trip
+           '("one"
+             (("key" . "value")
+              ("nested-map" . ((1 . 2) (3 . 4) (5 . 6)))
+              ("nested-list" . (1 2 3 4 5)))
+             ("nested" "list" 1 2 3))))
+  (should (yaml-test-round-trip
+           '("one"
+             (("key" . "value")
+              ("nested-map" . ((1 . 2) (3 . 4) (5 . 6)))
+              ("nested-list" . (1 2 3 4 5)))
+             ("nested" "list" 1 2 3))))
+  (should (yaml-test-round-trip
+           '(t nil)))
+  (should (yaml-encode
+           '((("aaaa" "bbbb" "cccc") ("dddd" "eeee" "ffff") ("gggg" "hhhh" "iiii"))
+             ("jjjj" "kkkk" "llll") ("mmmm" "nnnn" "oooo") ("pppp" "qqqq" "rrrr")))))
+
 (provide 'yaml-tests)
 
 ;; yaml-tests.el ends here

@@ -2,7 +2,7 @@
 
 yaml.el is a YAML parser written in Emacs List without any external
 dependencies.  It provides an interface similar to the Emacs JSON
-parsing utility.  The function provided is as follows:
+parsing utility.  The functions provided are as follows:
 
 ``` emacs-lisp
 (yaml-parse-string string &rest args)
@@ -14,7 +14,7 @@ The following keyword args are accepted:
   objects data in.  It takes the following symbols:
   - `hash-table` (default)
   - `alist`
-  - `plist`
+n  - `plist`
 - `:sequence-type` specifies the Lisp data structure to store the
   parsed sequences in.  It takes the following symbols:
   - `array` (default)
@@ -23,6 +23,13 @@ The following keyword args are accepted:
   to the symbol `:null`.
 - `:false-object` specifies the lisp object to use for false.
   Defaults to the symbol `:false`.
+
+```emacs-lisp
+(yaml-encode object)
+```
+
+The function `yaml-encode` will encode a Lisp object to a YAML string.
+
 
 ## Installation
 
@@ -56,9 +63,20 @@ translations:
   three: үш")
 
 ;; => #s(hash-table ... data ("translations" #s(hash-table ...)))
+
+
+(yaml-encode '("omitted" ((count . 3) (value . 10) (items ("ruby" "diamond"))) "omitted"))
+
+;; => "
+- omitted
+- count: 3
+  value: 10
+  items:
+    ruby: [diamond]
+- omitted"
+
+
 ```
-
-
 
 ## Caveats
 
