@@ -14,7 +14,10 @@ The following keyword args are accepted:
   objects data in.  It takes the following symbols:
   - `hash-table` (default)
   - `alist`
-n  - `plist`
+  - `plist`
+- `:object-key-type` specifies how map keys should be handled. It takes the following symbols:
+  - `string` (default)
+  - `symbol` keys of maps will be converted to symbols. Not that this matches the behavior of the JSON parser.
 - `:sequence-type` specifies the Lisp data structure to store the
   parsed sequences in.  It takes the following symbols:
   - `array` (default)
