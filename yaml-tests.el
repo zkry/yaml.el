@@ -513,10 +513,30 @@ keep: |+
               ("nested-list" . (1 2 3 4 5)))
              ("nested" "list" 1 2 3))))
   (should (yaml-test-round-trip
+           '("one" t nil :false)))
+  (should (yaml-test-round-trip
            '(t nil)))
+  (should (yaml-test-round-trip
+           [1 2 3 4]))
   (should (yaml-encode
            '((("aaaa" "bbbb" "cccc") ("dddd" "eeee" "ffff") ("gggg" "hhhh" "iiii"))
-             ("jjjj" "kkkk" "llll") ("mmmm" "nnnn" "oooo") ("pppp" "qqqq" "rrrr")))))
+             ("jjjj" "kkkk" "llll") ("mmmm" "nnnn" "oooo") ("pppp" "qqqq" "rrrr"))))
+  (should (yaml-encode
+           '(("aaaa" "bbbb" "cccc" ("dddd" "eeee" "ffff") ("gggg" "hhhh" "iiii"))
+             ("jjjj" "kkkk" "llll") ("mmmm" "nnnn" "oooo") ("pppp" "qqqq" "rrrr"))))
+
+  (should (equal
+           (yaml-encode :null)
+           "null"))
+  (should (equal
+           (yaml-encode :false)
+           "false"))
+  (should (equal
+           (yaml-encode nil)
+           "null"))
+  (should (equal
+           (yaml-encode [1 2 3])
+           "[1, 2, 3]")))
 
 (provide 'yaml-tests)
 

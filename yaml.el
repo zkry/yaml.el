@@ -2371,6 +2371,7 @@ without first inserting a newline."
    ((yaml--scalarp object) (yaml--encode-scalar object))
    ((hash-table-p object) (yaml--encode-hash-table object indent auto-indent))
    ((listp object) (yaml--encode-list object indent auto-indent))
+   ((arrayp object) (yaml--encode-array object indent auto-indent))
    (t (error "Unknown object %s" object))))
 
 (defun yaml--scalarp (object)
@@ -2389,14 +2390,27 @@ without first inserting a newline."
          (s (replace-regexp-in-string "\"" "\\\\\"" s)))
     s))
 
+(defun yaml--encode-array (a indent &optional auto-indent)
+  "Encode array A to a string in the context of being INDENT deep.
+
+If AUTO-INDENT is non-nil, start the list on the current line,
+auto-detecting the indentation.  Functionality defers to
+`yaml--encode-list'."
+  (yaml--encode-list (seq-map #'identity a)
+                      indent
+                      auto-indent))
 
 
 (defun yaml--encode-scalar (s)
   "Encode scalar S to buffer."
   (cond
-   ((not s) (insert "nil"))
+   ((not s) (insert "null"))
    ((eql t s) (insert "true"))
-   ((symbolp s) (insert (symbol-name s)))
+   ((symbolp s)
+    (cond
+     ((eql s :null) (insert "null"))
+     ((eql s :false) (insert "false"))
+     (t (insert t))))
    ((numberp s) (insert (number-to-string s)))
    ((stringp s)
     (if (string-match "\\`[-_a-zA-Z0-9]+\\'" s)
