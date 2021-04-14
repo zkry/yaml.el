@@ -429,16 +429,16 @@ foo: bar
 - c"))
 
   ;; example 8.1
-;;   (should (yaml-parse-string "- |
-;; \sdetected
-;; - >
-;; \s
-;; \s\s
-;; \s\s# detected
-;; - |1
-;; \s\sexplicit
-;; - >
-;; \s\t
+  ;;   (should (yaml-parse-string "- |
+  ;; \sdetected
+  ;; - >
+  ;; \s
+  ;; \s\s
+  ;; \s\s# detected
+  ;; - |1
+  ;; \s\sexplicit
+  ;; - >
+  ;; \s\t
   ;; \sdetected"))
 
 
