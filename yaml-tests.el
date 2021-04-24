@@ -93,7 +93,7 @@
            (yaml-parse-string "key: value")
            (let ((ht (make-hash-table :test 'equal)))
              (prog1 ht
-               (puthash "key" "value" ht)))))
+               (puthash 'key "value" ht)))))
   (should (equal (yaml-parse-string "value")
                  "value"))
   (should (equal (yaml-parse-string "[abc, def, ghi]")
@@ -139,7 +139,7 @@ strip: |-
 \s\s
  # Clip
   # comments:" :object-type 'alist)
-                 '(("strip" . "# text"))))
+                 '((strip . "# text"))))
 
   (should (equal (yaml-parse-string ">
 
@@ -167,7 +167,7 @@ strip: |-
   - one
   - two : three
 " :object-type 'alist)
-                 '(("block sequence" . ["one" (("two" . "three"))]))))
+                 `((,(intern "block sequence") . ["one" ((two . "three"))]))))
 
   ;; Example 8.15. Block Sequence Entry Types
   (should (equal (yaml-parse-string "- # Empty
@@ -176,13 +176,13 @@ strip: |-
 - - one # Compact
   - two # sequence
 - one: two # Compact mapping" :object-type 'alist)
-                 [:null "block node\n" ["one" "two"] (("one" . "two"))]))
+                 [:null "block node\n" ["one" "two"] ((one . "two"))]))
 
   ;; Example 8.16. Block mapping
   (should (equal (yaml-parse-string "block mapping:
  key: value
 " :object-type 'alist)
-                 '(("block mapping" . (("key" . "value"))))))
+                 `((,(intern "block mapping") . ((key . "value"))))))
 
 
   ;; Example 8.17. Explicit Block Mapping Entries
@@ -192,8 +192,8 @@ strip: |-
 : - one # Explicit compact
   - two # block value
 " :object-type 'alist)
-                 '(("explicit key" . :null)
-                   ("block key\n" . ["one" "two"]))))
+                 `((,(intern "explicit key") . :null)
+                   (,(intern "block key\n") . ["one" "two"]))))
 
   ;; Example 8.18. Implicit Block Mapping Entries
   (should (equal (yaml-parse-string "plain key: in-line value
@@ -201,9 +201,9 @@ strip: |-
 \"quoted key\":
 - entry
 " :object-type 'alist)
-                 '(("plain key" . "in-line value")
+                 `((,(intern "plain key") . "in-line value")
                    (:null . :null)
-                   ("quoted key" . ["entry"]))))
+                   (,(intern "quoted key") . ["entry"]))))
 
 
   ;; Example 8.19. Compact Block Mappings
@@ -211,7 +211,7 @@ strip: |-
 - ? earth: blue
   : moon: white
 " :object-type 'alist)
-                 [(("sun" . "yellow")) (((("earth" . "blue")) . (("moon" . "white"))))]))
+                 [((sun . "yellow")) ((((earth . "blue")) . ((moon . "white"))))]))
 
   ;; Example 8.20. Block Node Types
   (should (equal (yaml-parse-string "-
@@ -221,7 +221,7 @@ strip: |-
 - !!map # Block collection
   foo : bar
 " :object-type 'alist)
-                 ["flow in block" "Block scalar\n" (("foo" . "bar"))]))
+                 ["flow in block" "Block scalar\n" ((foo . "bar"))]))
 
   ;; Example 8.21. Block Scalar Nodes
   ;; TODO: The document has no new line after the literal and folded
@@ -233,7 +233,7 @@ folded:
    !foo
   >1
  value" :object-type 'alist)
-                 '(("literal" . "value\n") ("folded" . "value\n"))))
+                 '((literal . "value\n") (folded . "value\n"))))
 
   (should (equal (yaml-parse-string "sequence: !!seq
 - entry
@@ -241,8 +241,8 @@ folded:
  - nested
 mapping: !!map
  foo: bar" :object-type 'alist)
-                 '(("sequence" . ["entry" ["nested"]])
-                   ("mapping" . (("foo" . "bar"))))))
+                 '((sequence . ["entry" ["nested"]])
+                   (mapping . ((foo . "bar"))))))
 
   ;; Example 9.2. Document Markers
   (should (equal (yaml-parse-string "%YAML 1.2
@@ -270,18 +270,18 @@ Document
 { matches
 % : 20 }
 ..." :object-type 'alist)
-                 '(("matches %" . 20))))
+                 `((,(intern "matches %") . 20))))
 
   (should (equal (yaml-parse-string "strip: |-
    beep
   # text" :object-type 'alist)
-                 '(("strip" . "beep"))))
+                 '((strip . "beep"))))
 
   (should (equal (yaml-parse-string "
 - one: |
    hey
 - two" :object-type 'alist)
-                 [(("one" . "hey\n"))
+                 [((one . "hey\n"))
                   "two"]))
 
   (should (equal (yaml-parse-string "
@@ -289,8 +289,8 @@ one:
      note: |-
       this is a note
      two: three" :object-type 'alist)
-                 '(("one" . (("note" . "this is a note")
-                             ("two" . "three"))))))
+                 '((one . ((note . "this is a note")
+                           (two . "three"))))))
 
   (should (equal (yaml-parse-string "key: |-
    # not
@@ -300,7 +300,7 @@ one:
  # are
 # all
 # comments" :object-type 'alist)
-                 '(("key" . "# not\n# a\n# comment"))))
+                 '((key . "# not\n# a\n# comment"))))
   (should (equal (yaml-parse-string "
 abc:
   key-1: |-
@@ -316,9 +316,9 @@ abc:
  # are
 # all
 # comments" :object-type 'alist)
-                 '(("abc" ("key-1" . "# not
+                 '((abc (key-1 . "# not
 # a
-# comment") ("key-2" . [1 2 "three"]) ("key-3" . ["deeply" "nested
+# comment") (key-2 . [1 2 "three"]) (key-3 . ["deeply" "nested
 "])))))
 
   (should (equal (yaml-parse-string "
@@ -329,8 +329,8 @@ key-2: |2-
     ---
     ---"
                                     :object-type 'alist)
-                 '(("key-1" . "  ---\n  ---")
-                   ("key-2" . "  ---\n  ---"))))
+                 '((key-1 . "  ---\n  ---")
+                   (key-2 . "  ---\n  ---"))))
   (should (equal (yaml-parse-string "
 key-1: |-2
     ---
@@ -338,10 +338,10 @@ key-1: |-2
 key-2: |2-
     ---
     ---"
-                                    :object-key-type 'symbol
+                                    :object-key-type 'string
                                     :object-type 'alist)
-                 '((key-1 . "  ---\n  ---")
-                   (key-2 . "  ---\n  ---")))))
+                 '(("key-1" . "  ---\n  ---")
+                   ("key-2" . "  ---\n  ---")))))
 
 
 (ert-deftest yaml-parsing-completes ()
