@@ -2417,7 +2417,7 @@ auto-detecting the indentation.  Functionality defers to
     (cond
      ((eql s :null) (insert "null"))
      ((eql s :false) (insert "false"))
-     (t (insert t))))
+     (t (insert (symbol-name s)))))
    ((numberp s) (insert (number-to-string s)))
    ((stringp s)
     (if (string-match "\\`[-_a-zA-Z0-9]+\\'" s)
