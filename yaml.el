@@ -1150,7 +1150,7 @@ Rules for this function are defined by the yaml-spec JSON file."
        (yaml--all (yaml--chr ?\!) (yaml--chr ?\!))))
 
     ('ns-esc-next-line
-     (yaml--frame "ns-esc-next-line" (yaml--chr ?\n)))
+     (yaml--frame "ns-esc-next-line" (yaml--chr ?N)))
 
     ('l-nb-same-lines
      (let ((n (nth 0 args)))
@@ -1292,7 +1292,7 @@ Rules for this function are defined by the yaml-spec JSON file."
                     (<= (length (yaml--match)) n)))))
 
     ('ns-esc-carriage-return
-     (yaml--frame "ns-esc-carriage-return" (yaml--chr ?\r)))
+     (yaml--frame "ns-esc-carriage-return" (yaml--chr ?r)))
 
     ('l-chomped-empty
      (let ((n (nth 0 args))
@@ -1384,7 +1384,7 @@ Rules for this function are defined by the yaml-spec JSON file."
          (yaml--rep n n (lambda () (yaml--parse-from-grammar 's-space))))))
 
     ('ns-esc-line-separator
-     (yaml--frame "ns-esc-line-separator" (yaml--chr ?\L)))
+     (yaml--frame "ns-esc-line-separator" (yaml--chr ?L)))
 
     ('ns-flow-yaml-node
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -1470,7 +1470,7 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-esc-space
      (yaml--frame "ns-esc-space" (yaml--chr ?\x20)))
     ('ns-esc-vertical-tab
-     (yaml--frame "ns-esc-vertical-tab" (yaml--chr ?\v)))
+     (yaml--frame "ns-esc-vertical-tab" (yaml--chr ?v)))
 
     ('ns-s-implicit-yaml-key
      (let ((c (nth 0 args)))
@@ -1518,7 +1518,7 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-esc-backspace
      (yaml--frame "ns-esc-backspace"
-       (yaml--chr ?\b)))
+       (yaml--chr ?b)))
 
     ('c-flow-json-content
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -2080,7 +2080,7 @@ Rules for this function are defined by the yaml-spec JSON file."
                   (yaml--chr ?\-))))
 
     ('ns-esc-form-feed
-     (yaml--frame "ns-esc-form-feed" (yaml--chr ?\f)))
+     (yaml--frame "ns-esc-form-feed" (yaml--chr ?f)))
 
     ('ns-s-block-map-implicit-key
      (yaml--frame "ns-s-block-map-implicit-key"
@@ -2142,7 +2142,7 @@ Rules for this function are defined by the yaml-spec JSON file."
                   (yaml--parse-from-grammar 's-l+flow-in-block (nth 0 args)))))
 
     ('ns-esc-bell
-     (yaml--frame "ns-esc-bell" (yaml--chr ?\a)))
+     (yaml--frame "ns-esc-bell" (yaml--chr ?a)))
 
     ('c-named-tag-handle
      (yaml--frame "c-named-tag-handle"
@@ -2166,7 +2166,7 @@ Rules for this function are defined by the yaml-spec JSON file."
                   (yaml--parse-from-grammar 's-l-comments))))
 
     ('ns-esc-escape
-     (yaml--frame "ns-esc-escape" (yaml--chr ?\e)))
+     (yaml--frame "ns-esc-escape" (yaml--chr ?e)))
 
     ('b-nb-literal-next
      (let ((n (nth 0 args)))
@@ -2213,7 +2213,7 @@ Rules for this function are defined by the yaml-spec JSON file."
                   (yaml--parse-from-grammar 's-l+block-collection (nth 0 args) (nth 1 args)))))
 
     ('ns-esc-paragraph-separator
-     (yaml--frame "ns-esc-paragraph-separator" (yaml--chr ?\P)))
+     (yaml--frame "ns-esc-paragraph-separator" (yaml--chr ?P)))
 
     ('c-double-quoted
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -2227,7 +2227,7 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-esc-horizontal-tab
      (yaml--frame "ns-esc-horizontal-tab"
-       (yaml--any (yaml--chr ?\t) (yaml--chr ?\x09))))
+       (yaml--any (yaml--chr ?t) (yaml--chr ?\x09))))
 
     ('c-ns-flow-map-empty-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -2340,7 +2340,7 @@ Rules for this function are defined by the yaml-spec JSON file."
      (yaml--frame "c-literal" (yaml--chr ?\|)))
 
     ('ns-esc-line-feed
-     (yaml--frame "ns-esc-line-feed" (yaml--chr ?\n)))
+     (yaml--frame "ns-esc-line-feed" (yaml--chr ?n)))
 
     ('nb-double-multi-line
      (let ((n (nth 0 args)))
