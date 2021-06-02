@@ -536,7 +536,11 @@ keep: |+
            "null"))
   (should (equal
            (yaml-encode [1 2 3])
-           "[1, 2, 3]")))
+           "[1, 2, 3]"))
+  (should (yaml-test-round-trip
+           '((build_the_package (script . "if [ -z \"${CUSTOM}\" ]; then
+  ./mvnw package
+fi") (stage . "build"))))))
 
 (provide 'yaml-tests)
 
