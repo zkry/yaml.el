@@ -1,5 +1,7 @@
 # yaml.el
 
+[![MELPA](https://melpa.org/packages/yaml-badge.svg)](https://melpa.org/#/yaml)
+
 yaml.el is a YAML parser written in Emacs List without any external
 dependencies.  It provides an interface similar to the Emacs JSON
 parsing utility.  The functions provided are as follows:
