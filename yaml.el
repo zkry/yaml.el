@@ -232,12 +232,15 @@ This flag is intended for development purposes.")
 
 (defun yaml--chomp-text (text-body chomp)
   "Change the ending newline of TEXT-BODY based on CHOMP."
-  (cond ((eq :clip chomp) (concat (replace-regexp-in-string "\n*\\'" "" text-body) "\n"))
-        ((eq :strip chomp) (replace-regexp-in-string "\n*\\'" "" text-body))
-        ((eq :keep chomp) text-body)))
+  (cond ((eq :clip chomp)
+         (concat (replace-regexp-in-string "\n*\\'" "" text-body) "\n"))
+        ((eq :strip chomp)
+         (replace-regexp-in-string "\n*\\'" "" text-body))
+        ((eq :keep chomp)
+         text-body)))
 
 (defun yaml--process-folded-text (text)
-  "Remvoe the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
+  "Remvoe the header line for a folded match and return TEXT body formatted."
   (let* ((text (yaml--process-literal-text text))
          (done))
     (while (not done)
@@ -247,21 +250,26 @@ This flag is intended for development purposes.")
         (when (equal replaced text)
           (setq done t))
         (setq text replaced)))
-    (replace-regexp-in-string "\\(\\(?:^\\|\n\\)[^ \n][^\n]*\\)\n\\(\n+\\)\\([^\n ]\\)" "\\1\\2\\3" text)))
+    (replace-regexp-in-string
+     "\\(\\(?:^\\|\n\\)[^ \n][^\n]*\\)\n\\(\n+\\)\\([^\n ]\\)" "\\1\\2\\3"
+     text)))
 
 (defun yaml--process-literal-text (text)
-  "Remove the header line for a folded match and return TEXT body properly formatted with INDENTATION stripped."
+  "Remove the header line for a folded match and return TEXT body formatted."
   (let* ((header-line (substring text 0 (string-match "\n" text)))
          (text-body (substring text (1+ (string-match "\n" text))))
          (parsed-header (yaml--parse-block-header header-line))
          (chomp (car parsed-header))
-         (starting-spaces-ct (or (cadr parsed-header)
-                                 (let ((_ (string-match "^\n*\\( *\\)" text-body)))
-                                   (length (match-string 1 text-body)))))
+         (starting-spaces-ct
+          (or (cadr parsed-header)
+              (let ((_ (string-match "^\n*\\( *\\)" text-body)))
+                (length (match-string 1 text-body)))))
          (lines (split-string text-body "\n"))
-         (striped-lines (seq-map (lambda (l)
-                                   (replace-regexp-in-string (format "\\` \\{0,%d\\}" starting-spaces-ct) "" l))
-                                 lines))
+         (striped-lines
+          (seq-map (lambda (l)
+                     (replace-regexp-in-string
+                      (format "\\` \\{0,%d\\}" starting-spaces-ct) "" l))
+                   lines))
          (text-body (string-join striped-lines "\n")))
     (yaml--chomp-text text-body chomp)))
 
@@ -293,13 +301,16 @@ This flag is intended for development purposes.")
    ((string-match "^0x[0-9a-fA-F]+$" scalar)
     (string-to-number scalar 16))
    ;; tag:yaml.org,2002:float
-   ((string-match "^[-+]?\\(\\.[0-9]+\\|[0-9]+\\(\\.[0-9]*\\)?\\)\\([eE][-+]?[0-9]+\\)?$" scalar)
+   ((string-match
+     "^[-+]?\\(\\.[0-9]+\\|[0-9]+\\(\\.[0-9]*\\)?\\)\\([eE][-+]?[0-9]+\\)?$"
+     scalar)
     (string-to-number scalar 10))
    ((string-match "^[-+]?\\(\\.inf\\|\\.Inf\\|\\.INF\\)$" scalar)
     1.0e+INF)
    ((string-match "^[-+]?\\(\\.nan\\|\\.NaN\\|\\.NAN\\)$" scalar)
     1.0e+INF)
-   ((string-match "^0$\\|^-?[1-9]\\(\\.[0-9]*\\)?\\(e[-+][1-9][0-9]*\\)?$" scalar)
+   ((string-match "^0$\\|^-?[1-9]\\(\\.[0-9]*\\)?\\(e[-+][1-9][0-9]*\\)?$"
+                  scalar)
     (string-to-number scalar))
    (t scalar)))
 
@@ -426,7 +437,11 @@ This flag is intended for development purposes.")
       (let ((comment-text (pop yaml--object-stack)))
         (unless (stringp value)
           (error "Trail-comments can't be nested under non-string"))
-        (yaml--scalar-event style (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*\\'") "" value ))))
+        (yaml--scalar-event
+         style
+         (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*\\'")
+                                   ""
+                                   value ))))
      ((equal top-state nil))))
   '(:scalar))
 
@@ -482,163 +497,202 @@ reverse order."
   "List of functions for matched rules that run on the entering of a rule.")
 
 (defconst yaml--grammar-events-out
-  '(("c-b-block-header" . (lambda (text)
-                            nil))
-    ("l-yaml-stream" . (lambda (text)
-                         (yaml--check-document-end)
-                         (yaml--stream-end-event)))
-    ("ns-yaml-version" . (lambda (text)
-                           (when yaml--document-start-version
-                             (throw 'error "Multiple %YAML directives not allowed."))
-                           (setq yaml--document-start-version text)))
-    ("c-tag-handle" . (lambda (text)
-                        (setq yaml--tag-handle text)))
-    ("ns-tag-prefix" . (lambda (text)
-                         (puthash yaml--tag-handle text yaml--tag-map)))
-    ("c-directives-end" . (lambda (text)
-                            (yaml--check-document-end)
-                            (setq yaml--document-start-explicit t)))
-    ("c-document-end" . (lambda (text)
-                          (when (not yaml--document-end)
-                            (setq yaml--document-end-explicit t))
-                          (yaml--check-document-end)))
-    ("c-flow-mapping" . (lambda (text)
-                          (yaml--mapping-end-event)))
-    ("c-flow-sequence" . (lambda (text)
-                           (yaml--sequence-end-event )))
-    ("l+block-mapping" . (lambda (text)
-                           (yaml--mapping-end-event)))
-    ("l+block-sequence" . (lambda (text)
-                            (yaml--reverse-at-list)
-                            (yaml--sequence-end-event)))
-    ("ns-l-compact-mapping" . (lambda (text)
-                                (yaml--mapping-end-event)))
-    ("ns-l-compact-sequence" . (lambda (text)
-                                 (yaml--sequence-end-event)))
-    ("ns-flow-pair" . (lambda (text)
-                        (yaml--mapping-end-event)))
-    ("ns-plain" . (lambda (text)
-                    (let* ((replaced (if (and (zerop (length yaml--state-stack))
-                                              (string-match "\\(^\\|\n\\)\\.\\.\\.\\'" text))
-                                         ;; Hack to not send the document parse end.
-                                         ;; Will only occur with bare ns-plain at top level.
-                                         (replace-regexp-in-string "\\(^\\|\n\\)\\.\\.\\.\\'" "" text)
-                                       text))
-                           (replaced (replace-regexp-in-string
-                                      "\\(?:[ \t]*\r?\n[ \t]*\\)"
-                                      "\n"
-                                      replaced))
-                           (replaced (replace-regexp-in-string
-                                      "\\(\n\\)\\(\n*\\)"
-                                      (lambda (x)
-                                        (if (> (length x) 1)
-                                            (substring x 1)
-                                          " "))
-                                      replaced)))
-                      (yaml--scalar-event "plain" replaced))))
-    ("c-single-quoted" . (lambda (text)
-                           (let* ((replaced (replace-regexp-in-string
-                                             "\\(?:[ \t]*\r?\n[ \t]*\\)"
-                                             "\n"
-                                             text))
-                                  (replaced (replace-regexp-in-string
-                                             "\\(\n\\)\\(\n*\\)"
-                                             (lambda (x)
-                                               (if (> (length x) 1)
-                                                   (substring x 1)
-                                                 " "))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "''"
-                                             (lambda (x)
-                                               (if (> (length x) 1)
-                                                   (substring x 1)
-                                                 "'"))
-                                             replaced)))
-                             (yaml--scalar-event "single" (substring replaced 1 (1- (length replaced)))))))
-    ("c-double-quoted" . (lambda (text)
-                           (let* ((replaced (replace-regexp-in-string
-                                             "\\(?:[ \t]*\r?\n[ \t]*\\)"
-                                             "\n"
-                                             text))
-                                  (replaced (replace-regexp-in-string
-                                             "\\(\n\\)\\(\n*\\)"
-                                             (lambda (x)
-                                               (if (> (length x) 1)
-                                                   (substring x 1)
-                                                 " "))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string "\\\\\\([\"\\/]\\)" "\\1" replaced))
-                                  (replaced (replace-regexp-in-string "\\\\ " " " replaced))
-                                  (replaced (replace-regexp-in-string "\\\\ " " " replaced))
-                                  (replaced (replace-regexp-in-string "\\\\b" "\b" replaced))
-                                  (replaced (replace-regexp-in-string "\\\\t" "\t" replaced))
-                                  (replaced (replace-regexp-in-string "\\\\n" "\n" replaced))
-                                  (replaced (replace-regexp-in-string "\\\\r" "\r" replaced))
-                                  (replaced (replace-regexp-in-string "\\\\r" "\r" replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "\\\\x\\([0-9a-fA-F]\\{2\\}\\)"
-                                             (lambda (x)
-                                               (let ((char-pt (substring 2 x)))
-                                                 (string (string-to-number char-pt 16))))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "\\\\x\\([0-9a-fA-F]\\{2\\}\\)"
-                                             (lambda (x)
-                                               (let ((char-pt (substring x 2)))
-                                                 (string (string-to-number char-pt 16))))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "\\\\x\\([0-9a-fA-F]\\{4\\}\\)"
-                                             (lambda (x)
-                                               (let ((char-pt (substring x 2)))
-                                                 (string (string-to-number char-pt 16))))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "\\\\x\\([0-9a-fA-F]\\{8\\}\\)"
-                                             (lambda (x)
-                                               (let ((char-pt (substring x 2)))
-                                                 (string (string-to-number char-pt 16))))
-                                             replaced))
-                                  (replaced (replace-regexp-in-string
-                                             "\\\\\\\\"
-                                             "\\"
-                                             replaced))
-                                  (replaced (substring replaced 1 (1- (length replaced)))))
-                             (yaml--scalar-event "double" replaced))))
-    ("c-l+literal" . (lambda (text)
-                       (when (equal (car yaml--state-stack) :trail-comments)
-                         (pop yaml--state-stack)
-                         (let ((comment-text (pop yaml--object-stack)))
-                           (setq text (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*\\'") "" text))))
-                       (let* ((processed-text (yaml--process-literal-text text)))
-                         (yaml--scalar-event "folded" processed-text))))
-    ("c-l+folded" . (lambda (text)
-                      (when (equal (car yaml--state-stack) :trail-comments)
-                        (pop yaml--state-stack)
-                        (let ((comment-text (pop yaml--object-stack)))
-                          (setq text (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*\\'") "" text))))
-                      (let* ((processed-text (yaml--process-folded-text text)))
-                        (yaml--scalar-event "folded" processed-text))))
-    ("e-scalar" . (lambda (text)
-                    (yaml--scalar-event "plain" "null")))
-    ("c-ns-anchor-property" . (lambda (text)
-                                (yaml--anchor-event (substring text 1))))
-    ("c-ns-tag-property" . (lambda (text)
-                             ;; TODO: Implement tags
-                             ))
-    ("l-trail-comments" . (lambda (text)
-                            (yaml--trail-comments-event text)))
-    ("c-ns-alias-node" . (lambda (text)
-                           (yaml--alias-event (substring text 1)))))
+  '(("c-b-block-header" .
+     (lambda (text)
+       nil))
+    ("l-yaml-stream" .
+     (lambda (text)
+       (yaml--check-document-end)
+       (yaml--stream-end-event)))
+    ("ns-yaml-version" .
+     (lambda (text)
+       (when yaml--document-start-version
+         (throw 'error "Multiple %YAML directives not allowed."))
+       (setq yaml--document-start-version text)))
+    ("c-tag-handle" .
+     (lambda (text)
+       (setq yaml--tag-handle text)))
+    ("ns-tag-prefix" .
+     (lambda (text)
+       (puthash yaml--tag-handle text yaml--tag-map)))
+    ("c-directives-end" .
+     (lambda (text)
+       (yaml--check-document-end)
+       (setq yaml--document-start-explicit t)))
+    ("c-document-end" .
+     (lambda (text)
+       (when (not yaml--document-end)
+         (setq yaml--document-end-explicit t))
+       (yaml--check-document-end)))
+    ("c-flow-mapping" .
+     (lambda (text)
+       (yaml--mapping-end-event)))
+    ("c-flow-sequence" .
+     (lambda (text)
+       (yaml--sequence-end-event )))
+    ("l+block-mapping" .
+     (lambda (text)
+       (yaml--mapping-end-event)))
+    ("l+block-sequence" .
+     (lambda (text)
+       (yaml--reverse-at-list)
+       (yaml--sequence-end-event)))
+    ("ns-l-compact-mapping" .
+     (lambda (text)
+       (yaml--mapping-end-event)))
+    ("ns-l-compact-sequence" .
+     (lambda (text)
+       (yaml--sequence-end-event)))
+    ("ns-flow-pair" .
+     (lambda (text)
+       (yaml--mapping-end-event)))
+    ("ns-plain" .
+     (lambda (text)
+       (let* ((replaced (if (and (zerop (length yaml--state-stack))
+                                 (string-match "\\(^\\|\n\\)\\.\\.\\.\\'" text))
+                            ;; Hack to not send the document parse end.
+                            ;; Will only occur with bare ns-plain at top level.
+                            (replace-regexp-in-string "\\(^\\|\n\\)\\.\\.\\.\\'"
+                                                      ""
+                                                      text)
+                          text))
+              (replaced (replace-regexp-in-string
+                         "\\(?:[ \t]*\r?\n[ \t]*\\)"
+                         "\n"
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "\\(\n\\)\\(\n*\\)"
+                         (lambda (x)
+                           (if (> (length x) 1)
+                               (substring x 1)
+                             " "))
+                         replaced)))
+         (yaml--scalar-event "plain" replaced))))
+    ("c-single-quoted" .
+     (lambda (text)
+       (let* ((replaced (replace-regexp-in-string
+                         "\\(?:[ \t]*\r?\n[ \t]*\\)"
+                         "\n"
+                         text))
+              (replaced (replace-regexp-in-string
+                         "\\(\n\\)\\(\n*\\)"
+                         (lambda (x)
+                           (if (> (length x) 1)
+                               (substring x 1)
+                             " "))
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "''"
+                         (lambda (x)
+                           (if (> (length x) 1)
+                               (substring x 1)
+                             "'"))
+                         replaced)))
+         (yaml--scalar-event "single"
+                             (substring replaced 1 (1- (length replaced)))))))
+    ("c-double-quoted" .
+     (lambda (text)
+       (let* ((replaced (replace-regexp-in-string
+                         "\\(?:[ \t]*\r?\n[ \t]*\\)"
+                         "\n"
+                         text))
+              (replaced (replace-regexp-in-string
+                         "\\(\n\\)\\(\n*\\)"
+                         (lambda (x)
+                           (if (> (length x) 1)
+                               (substring x 1)
+                             " "))
+                         replaced))
+              (replaced (replace-regexp-in-string "\\\\\\([\"\\/]\\)"
+                                                  "\\1"
+                                                  replaced))
+              (replaced (replace-regexp-in-string "\\\\ " " " replaced))
+              (replaced (replace-regexp-in-string "\\\\ " " " replaced))
+              (replaced (replace-regexp-in-string "\\\\b" "\b" replaced))
+              (replaced (replace-regexp-in-string "\\\\t" "\t" replaced))
+              (replaced (replace-regexp-in-string "\\\\n" "\n" replaced))
+              (replaced (replace-regexp-in-string "\\\\r" "\r" replaced))
+              (replaced (replace-regexp-in-string "\\\\r" "\r" replaced))
+              (replaced (replace-regexp-in-string
+                         "\\\\x\\([0-9a-fA-F]\\{2\\}\\)"
+                         (lambda (x)
+                           (let ((char-pt (substring 2 x)))
+                             (string (string-to-number char-pt 16))))
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "\\\\x\\([0-9a-fA-F]\\{2\\}\\)"
+                         (lambda (x)
+                           (let ((char-pt (substring x 2)))
+                             (string (string-to-number char-pt 16))))
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "\\\\x\\([0-9a-fA-F]\\{4\\}\\)"
+                         (lambda (x)
+                           (let ((char-pt (substring x 2)))
+                             (string (string-to-number char-pt 16))))
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "\\\\x\\([0-9a-fA-F]\\{8\\}\\)"
+                         (lambda (x)
+                           (let ((char-pt (substring x 2)))
+                             (string (string-to-number char-pt 16))))
+                         replaced))
+              (replaced (replace-regexp-in-string
+                         "\\\\\\\\"
+                         "\\"
+                         replaced))
+              (replaced (substring replaced 1 (1- (length replaced)))))
+         (yaml--scalar-event "double" replaced))))
+    ("c-l+literal" .
+     (lambda (text)
+       (when (equal (car yaml--state-stack) :trail-comments)
+         (pop yaml--state-stack)
+         (let ((comment-text (pop yaml--object-stack)))
+           (setq text (replace-regexp-in-string
+                       (concat (regexp-quote comment-text) "\n*\\'") "" text))))
+       (let* ((processed-text (yaml--process-literal-text text)))
+         (yaml--scalar-event "folded" processed-text))))
+    ("c-l+folded" .
+     (lambda (text)
+       (when (equal (car yaml--state-stack) :trail-comments)
+         (pop yaml--state-stack)
+         (let ((comment-text (pop yaml--object-stack)))
+           (setq text (replace-regexp-in-string
+                       (concat (regexp-quote comment-text) "\n*\\'") "" text))))
+       (let* ((processed-text (yaml--process-folded-text text)))
+         (yaml--scalar-event "folded" processed-text))))
+    ("e-scalar" .
+     (lambda (text)
+       (yaml--scalar-event "plain" "null")))
+    ("c-ns-anchor-property" .
+     (lambda (text)
+       (yaml--anchor-event (substring text 1))))
+    ("c-ns-tag-property" .
+     (lambda (text)
+       ;; TODO: Implement tags
+       ))
+    ("l-trail-comments" .
+     (lambda (text)
+       (yaml--trail-comments-event text)))
+    ("c-ns-alias-node" .
+     (lambda (text)
+       (yaml--alias-event (substring text 1)))))
   "List of functions for matched rules that run on the exiting of a rule.")
 
 (defconst yaml--terminal-rules
-  '( "l-nb-literal-text" "l-nb-diff-lines" "ns-plain" "c-single-quoted" "c-double-quoted")
-  "List of rules that indicate that the parse tree should end at and children ignored.")
+  '( "l-nb-literal-text"
+     "l-nb-diff-lines"
+     "ns-plain"
+     "c-single-quoted"
+     "c-double-quoted")
+  "List of rules that indicate at which the parse tree should stop.
+
+This addition is a hack to prevent the parse tree from going too deep and thus
+risk hitting the stack depth limit.  Each of these rules are recursive and
+repeat for each character in a text.")
 
 (defun yaml--walk-events (tree)
-  "Event walker iterates over the parse TREE and signals events based off of the parsed rules."
+  "Event walker iterates over the parse TREE and signals events from the rules."
   (when (consp tree)
     (if (stringp (car tree))
         (let ((grammar-rule (car tree))
@@ -659,27 +713,38 @@ reverse order."
   (declare (indent defun))
   (let ((res-symbol (make-symbol "res")))
     `(let ((beg yaml--parsing-position)
-           (_ (when (and yaml--parse-debug (not (member ,name yaml--tracing-ignore)))
+           (_ (when (and yaml--parse-debug
+                         (not (member ,name yaml--tracing-ignore)))
                 (message "|%s>%s %40s args=%s '%s'"
                          (make-string (length yaml--states) ?-)
                          (make-string (- 70 (length yaml--states)) ?\s)
                          ,name
                          args
-                         (replace-regexp-in-string "\n" "↓" (yaml--slice yaml--parsing-position)))))
+                         (replace-regexp-in-string
+                          "\n"
+                          "↓"
+                          (yaml--slice yaml--parsing-position)))))
            (_ (yaml--push-state ,name))
            (,res-symbol ,rule))
-       (when (and yaml--parse-debug ,res-symbol (not (member ,name yaml--tracing-ignore)))
+       (when (and yaml--parse-debug
+                  ,res-symbol
+                  (not (member ,name yaml--tracing-ignore)))
          (message "<%s|%s %40s = '%s'"
                   (make-string (length yaml--states) ?-)
                   (make-string (- 70 (length yaml--states)) ?\s)
                   ,name
-                  (replace-regexp-in-string "\n" "↓" (substring yaml--parsing-input beg yaml--parsing-position))))
+                  (replace-regexp-in-string
+                   "\n"
+                   "↓"
+                   (substring yaml--parsing-input beg yaml--parsing-position))))
        (yaml--pop-state)
        (if (not ,res-symbol)
            nil
          (let ((res-type (cdr (assoc ,name yaml--grammar-resolution-rules)))
                (,res-symbol (if (member ,name yaml--terminal-rules)
-                                t ;; Ignore children if at-rule is indicated to be terminal.
+                                ;; Ignore children if at-rule is
+                                ;; indicated to be terminal.
+                                t
                               ,res-symbol)))
            (cond
             ((or (assoc ,name yaml--grammar-events-in)
@@ -688,7 +753,8 @@ reverse order."
                    (substring yaml--parsing-input beg yaml--parsing-position)
                    ,res-symbol))
             ((equal res-type 'list) (list ,name ,res-symbol))
-            ((equal res-type 'literal) (substring yaml--parsing-input beg yaml--parsing-position))
+            ((equal res-type 'literal)
+             (substring yaml--parsing-input beg yaml--parsing-position))
             (t ,res-symbol)))))))
 
 (defun yaml--end-of-stream ()
@@ -758,7 +824,9 @@ reverse order."
           (rules-sym (make-symbol "rules"))
           (res-sym (make-symbol "res")))
       `(let ((,start-pos-sym yaml--parsing-position)
-             (,rules-sym ,(cons 'list (seq-map (lambda (form) `(lambda () ,form)) forms)))
+             (,rules-sym ,(cons 'list
+                                (seq-map (lambda (form) `(lambda () ,form))
+                                         forms)))
              (,res-sym))
          (while (and (not ,res-sym) ,rules-sym)
            (setq ,res-sym (funcall (car ,rules-sym)))
@@ -818,8 +886,9 @@ This is currently unimplemented."
 (defun yaml--auto-detect-indent (n)
   "Detect the indentation given N."
   (let* ((pos yaml--parsing-position)
-         (in-seq (and (> pos 0)
-                      (yaml--char-match (yaml--char-at-pos (1- pos)) ?\- ?\? ?\:)))
+         (in-seq (and
+                  (> pos 0)
+                  (yaml--char-match (yaml--char-at-pos (1- pos)) ?\- ?\? ?\:)))
          (slice (yaml--slice pos))
          (_ (string-match
              "^\\(\\(?: *\\(?:#.*\\)?\n\\)*\\)\\( *\\)"
@@ -839,7 +908,9 @@ This is currently unimplemented."
   (or (>= yaml--parsing-position (length yaml--parsing-input))
       (and (yaml--state-curr-doc)
            (yaml--start-of-line)
-           (string-match "\\^g(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)" (substring yaml--parsing-input yaml--parsing-position)))))
+           (string-match
+            "\\^g(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)"
+            (substring yaml--parsing-input yaml--parsing-position)))))
 
 (defun yaml--ord (f)
   "Convert an ASCII number returned by F to a number."
@@ -867,10 +938,12 @@ This is currently unimplemented."
 
 (defmacro yaml--rep (min max func)
   "Repeat FUNC between MIN and MAX times."
+  (declare (indent 2))
   `(yaml--rep2 ,min ,max ,func))
 
 (defun yaml--rep2 (min max func)
   "Repeat FUNC between MIN and MAX times."
+  (declare (indent 2))
   (if (and max (< max 0))
       nil
     (let* ((res-list '())
@@ -966,7 +1039,7 @@ value.  It defaults to the symbol :false."
       (setq yaml--parsing-object-type 'alist))
      ((equal 'plist object-type)
       (setq yaml--parsing-object-type 'plist))
-     (t (error "Invalid object-type.  object-type must be hash-table, alist, or plist")))
+     (t (error "Invalid object-type.  Must be hash-table, alist, or plist")))
     (cond
      ((or (not object-key-type)
           (equal 'symbol object-key-type))
@@ -977,7 +1050,7 @@ value.  It defaults to the symbol :false."
       (setq yaml--parsing-object-key-type 'string))
      ((equal 'keyword object-key-type)
       (setq yaml--parsing-object-key-type 'keyword))
-     (t (error "Invalid object-key-type.  object-key-type must be string, keyword, or symbol")))
+     (t (error "Invalid object-key-type.  Must be string, keyword, or symbol")))
     (cond
      ((or (not sequence-type)
           (equal sequence-type 'array))
@@ -991,9 +1064,10 @@ value.  It defaults to the symbol :false."
                  (yaml--top))))
 
       (when (< yaml--parsing-position (length yaml--parsing-input))
-        (error "Unable to parse YAML stream.  Parser finished before end of input %s/%s"
-               yaml--parsing-position
-               (length yaml--parsing-input)))
+        (error
+         "Unable to parse YAML.  Parser finished before end of input %s/%s"
+         yaml--parsing-position
+         (length yaml--parsing-input)))
       (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
       (yaml--walk-events res)
       (if (zerop (hash-table-count yaml--anchor-mappings))
@@ -1014,11 +1088,16 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args))
            (c (nth 1 args)))
        (yaml--frame "c-flow-sequence"
-         (yaml--all (yaml--chr ?\[)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'ns-s-flow-seq-entries n
-                                                                        (yaml--parse-from-grammar 'in-flow c))))
-                    (yaml--chr ?\])))))
+         (yaml--all
+          (yaml--chr ?\[)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate n c)))
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--parse-from-grammar
+               'ns-s-flow-seq-entries n
+               (yaml--parse-from-grammar 'in-flow c))))
+          (yaml--chr ?\])))))
 
     ('c-indentation-indicator
      (let ((m (nth 0 args)))
@@ -1033,8 +1112,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-reserved-directive
      (yaml--frame "ns-reserved-directive"
        (yaml--all (yaml--parse-from-grammar 'ns-directive-name)
-                  (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 's-separate-in-line)
-                                                          (yaml--parse-from-grammar 'ns-directive-parameter)))))))
+                  (yaml--rep2 0 nil
+                    (lambda ()
+                      (yaml--all
+                       (yaml--parse-from-grammar 's-separate-in-line)
+                       (yaml--parse-from-grammar 'ns-directive-parameter)))))))
 
     ('ns-flow-map-implicit-entry
      (let ((n (nth 0 args))
@@ -1045,9 +1127,10 @@ Rules for this function are defined by the yaml-spec JSON file."
          ;; when the correct answer should be
          ;; c-ns-flow-map-json-key-entry.  Changing the order seemed to
          ;; have fix this but this seems like a bandage fix.
-         (yaml--any (yaml--parse-from-grammar 'c-ns-flow-map-json-key-entry n c)
-                    (yaml--parse-from-grammar 'ns-flow-map-yaml-key-entry n c)
-                    (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)))))
+         (yaml--any
+          (yaml--parse-from-grammar 'c-ns-flow-map-json-key-entry n c)
+          (yaml--parse-from-grammar 'ns-flow-map-yaml-key-entry n c)
+          (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)))))
 
     ('ns-esc-double-quote
      (yaml--frame "ns-esc-double-quote"
@@ -1080,20 +1163,28 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('c-ns-shorthand-tag
      (yaml--frame "c-ns-shorthand-tag"
-       (yaml--all (yaml--parse-from-grammar 'c-tag-handle)
-                  (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-tag-char))))))
+       (yaml--all
+        (yaml--parse-from-grammar 'c-tag-handle)
+        (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-tag-char))))))
 
     ('nb-ns-single-in-line
      (yaml--frame "nb-ns-single-in-line"
-       (yaml--rep2 0 nil (lambda () (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))
-                                               (yaml--parse-from-grammar 'ns-single-char))))))
+       (yaml--rep2 0 nil
+         (lambda ()
+           (yaml--all (yaml--rep2 0 nil
+                        (lambda () (yaml--parse-from-grammar 's-white)))
+                      (yaml--parse-from-grammar 'ns-single-char))))))
 
     ('l-strip-empty
      (let ((n (nth 0 args)))
        (yaml--frame "l-strip-empty"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 's-indent-le n)
-                                                            (yaml--parse-from-grammar 'b-non-content))))
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-trail-comments n)))))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--all
+                        (yaml--parse-from-grammar 's-indent-le n)
+                        (yaml--parse-from-grammar 'b-non-content))))
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 'l-trail-comments n)))))))
 
     ('c-indicator
      (yaml--frame "c-indicator"
@@ -1121,9 +1212,12 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args)))
        (yaml--frame "c-l+literal"
          (progn
-           (yaml--all (yaml--chr ?\|)
-                      (yaml--parse-from-grammar 'c-b-block-header n (yaml--state-curr-t))
-                      (yaml--parse-from-grammar 'l-literal-content (max (+ n (yaml--state-curr-m)) 1) (yaml--state-curr-t)))))))
+           (yaml--all
+            (yaml--chr ?\|)
+            (yaml--parse-from-grammar 'c-b-block-header n (yaml--state-curr-t))
+            (yaml--parse-from-grammar 'l-literal-content
+                                      (max (+ n (yaml--state-curr-m)) 1)
+                                      (yaml--state-curr-t)))))))
 
     ('c-single-quoted
      (let ((n (nth 0 args))
@@ -1136,9 +1230,13 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('c-forbidden
      (yaml--frame "c-forbidden"
        (yaml--all (yaml--start-of-line)
-                  (yaml--any (yaml--parse-from-grammar 'c-directives-end)
-                             (yaml--parse-from-grammar 'c-document-end))
-                  (yaml--any (yaml--parse-from-grammar 'b-char) (yaml--parse-from-grammar 's-white) (yaml--end-of-stream)))))
+                  (yaml--any
+                   (yaml--parse-from-grammar 'c-directives-end)
+                   (yaml--parse-from-grammar 'c-document-end))
+                  (yaml--any
+                   (yaml--parse-from-grammar 'b-char)
+                   (yaml--parse-from-grammar 's-white)
+                   (yaml--end-of-stream)))))
 
     ('c-ns-alias-node
      (yaml--frame "c-ns-alias-node"
@@ -1155,9 +1253,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('l-nb-same-lines
      (let ((n (nth 0 args)))
        (yaml--frame "l-nb-same-lines"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
-                    (yaml--any (yaml--parse-from-grammar 'l-nb-folded-lines n)
-                               (yaml--parse-from-grammar 'l-nb-spaced-lines n))))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
+          (yaml--any (yaml--parse-from-grammar 'l-nb-folded-lines n)
+                     (yaml--parse-from-grammar 'l-nb-spaced-lines n))))))
 
     ('c-alias
      (yaml--frame "c-alias" (yaml--chr ?\*)))
@@ -1171,9 +1271,10 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args)))
        (yaml--frame "c-l-block-map-implicit-value"
          (yaml--all (yaml--chr ?\:)
-                    (yaml--any (yaml--parse-from-grammar 's-l+block-node n "block-out")
-                               (yaml--all (yaml--parse-from-grammar 'e-node)
-                                          (yaml--parse-from-grammar 's-l-comments)))))))
+                    (yaml--any
+                     (yaml--parse-from-grammar 's-l+block-node n "block-out")
+                     (yaml--all (yaml--parse-from-grammar 'e-node)
+                                (yaml--parse-from-grammar 's-l-comments)))))))
 
     ('ns-uri-char
      (yaml--frame "ns-uri-char"
@@ -1206,14 +1307,18 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-esc-16-bit
      (yaml--frame "ns-esc-16-bit"
        (yaml--all (yaml--chr ?u)
-                  (yaml--rep 4 4 (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
+                  (yaml--rep 4 4
+                    (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
 
     ('l-nb-spaced-lines
      (let ((n (nth 0 args)))
        (yaml--frame "l-nb-spaced-lines"
-         (yaml--all (yaml--parse-from-grammar 's-nb-spaced-text n)
-                    (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 'b-l-spaced n)
-                                                            (yaml--parse-from-grammar 's-nb-spaced-text n))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-nb-spaced-text n)
+          (yaml--rep2 0 nil
+            (lambda () (yaml--all
+                        (yaml--parse-from-grammar 'b-l-spaced n)
+                        (yaml--parse-from-grammar 's-nb-spaced-text n))))))))
 
     ('ns-plain
      (let ((n (nth 0 args))
@@ -1242,19 +1347,26 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('l-nb-literal-text
      (let ((n (nth 0 args)))
        (yaml--frame "l-nb-literal-text"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
-                    (yaml--parse-from-grammar 's-indent n)
-                    (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'nb-char)))))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
+          (yaml--parse-from-grammar 's-indent n)
+          (yaml--rep 1 nil
+            (lambda () (yaml--parse-from-grammar 'nb-char)))))))
 
     ('ns-plain-char
      (let ((c (nth 0 args)))
        (yaml--frame "ns-plain-char"
-         (yaml--any (yaml--but (lambda () (yaml--parse-from-grammar 'ns-plain-safe c))
-                               (lambda () (yaml--chr ?\:)) (lambda () (yaml--chr ?\#)))
-                    (yaml--all (yaml--chk "<=" (yaml--parse-from-grammar 'ns-char))
-                               (yaml--chr ?\#))
-                    (yaml--all (yaml--chr ?\:)
-                               (yaml--chk "=" (yaml--parse-from-grammar 'ns-plain-safe c)))))))
+         (yaml--any
+          (yaml--but
+           (lambda () (yaml--parse-from-grammar 'ns-plain-safe c))
+           (lambda () (yaml--chr ?\:)) (lambda () (yaml--chr ?\#)))
+          (yaml--all
+           (yaml--chk "<=" (yaml--parse-from-grammar 'ns-char))
+           (yaml--chr ?\#))
+          (yaml--all
+           (yaml--chr ?\:)
+           (yaml--chk "=" (yaml--parse-from-grammar 'ns-plain-safe c)))))))
 
     ('ns-anchor-char
      (yaml--frame "ns-anchor-char"
@@ -1265,9 +1377,11 @@ Rules for this function are defined by the yaml-spec JSON file."
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "s-l+block-scalar"
          (yaml--all (yaml--parse-from-grammar 's-separate (+ n 1) c)
-                    (yaml--rep 0 1 (lambda ()
-                                     (yaml--all (yaml--parse-from-grammar 'c-ns-properties (+ n 1) c)
-                                                (yaml--parse-from-grammar 's-separate (+ n 1) c))))
+                    (yaml--rep 0 1
+                      (lambda ()
+                        (yaml--all
+                         (yaml--parse-from-grammar 'c-ns-properties (+ n 1) c)
+                         (yaml--parse-from-grammar 's-separate (+ n 1) c))))
                     (yaml--any (yaml--parse-from-grammar 'c-l+literal n)
                                (yaml--parse-from-grammar 'c-l+folded n))))))
 
@@ -1288,7 +1402,8 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-indent-le
      (let ((n (nth 0 args)))
        (yaml--frame "s-indent-le"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
+         (yaml--all (yaml--rep2 0 nil
+                      (lambda () (yaml--parse-from-grammar 's-space)))
                     (<= (length (yaml--match)) n)))))
 
     ('ns-esc-carriage-return
@@ -1306,9 +1421,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('c-s-implicit-json-key
      (let ((c (nth 0 args)))
        (yaml--frame "c-s-implicit-json-key"
-         (yaml--all (yaml--max 1024)
-                    (yaml--parse-from-grammar 'c-flow-json-node nil c)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
+         (yaml--all
+          (yaml--max 1024)
+          (yaml--parse-from-grammar 'c-flow-json-node nil c)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
 
     ('b-as-space
      (yaml--frame "b-as-space"
@@ -1317,26 +1434,41 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-s-flow-seq-entries
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-s-flow-seq-entries"
-         (yaml--all (yaml--parse-from-grammar 'ns-flow-seq-entry n c)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                    (yaml--rep 0 1 (lambda () (yaml--all (yaml--chr ?\,)
-                                                         (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                                                         (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'ns-s-flow-seq-entries n c))))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'ns-flow-seq-entry n c)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate n c)))
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all
+               (yaml--chr ?\,)
+               (yaml--rep 0 1
+                 (lambda () (yaml--parse-from-grammar 's-separate n c)))
+               (yaml--rep 0 1
+                 (lambda ()
+                   (yaml--parse-from-grammar 'ns-s-flow-seq-entries
+                                             n
+                                             c))))))))))
 
     ('l-block-map-explicit-value
      (let ((n (nth 0 args)))
        (yaml--frame "l-block-map-explicit-value"
-         (yaml--all (yaml--parse-from-grammar 's-indent n)
-                    (yaml--chr ?\:)
-                    (yaml--parse-from-grammar 's-l+block-indented n "block-out")))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-indent n)
+          (yaml--chr ?\:)
+          (yaml--parse-from-grammar 's-l+block-indented n "block-out")))))
 
     ('c-ns-flow-map-json-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-flow-map-json-key-entry"
-         (yaml--all (yaml--parse-from-grammar 'c-flow-json-node n c)
-                    (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                                          (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c))
-                               (yaml--parse-from-grammar 'e-node))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'c-flow-json-node n c)
+          (yaml--any
+           (yaml--all
+            (yaml--rep 0 1
+              (lambda () (yaml--parse-from-grammar 's-separate n c)))
+            (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c))
+           (yaml--parse-from-grammar 'e-node))))))
 
     ('c-sequence-entry
      (yaml--frame "c-sequence-entry" (yaml--chr ?\-)))
@@ -1368,15 +1500,20 @@ Rules for this function are defined by the yaml-spec JSON file."
          (yaml--all (yaml--parse-from-grammar 's-indent-lt n)
                     (yaml--parse-from-grammar 'c-nb-comment-text)
                     (yaml--parse-from-grammar 'b-comment)
-                    (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment)))))))
+                    (yaml--rep2 0 nil
+                      (lambda () (yaml--parse-from-grammar 'l-comment)))))))
 
     ('ns-flow-map-yaml-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-map-yaml-key-entry"
-         (yaml--all (yaml--parse-from-grammar 'ns-flow-yaml-node n c)
-                    (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                                          (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c))
-                               (yaml--parse-from-grammar 'e-node))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'ns-flow-yaml-node n c)
+          (yaml--any
+           (yaml--all
+            (yaml--rep 0 1
+              (lambda () (yaml--parse-from-grammar 's-separate n c)))
+            (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c))
+           (yaml--parse-from-grammar 'e-node))))))
 
     ('s-indent
      (let ((n (nth 0 args)))
@@ -1389,18 +1526,24 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-flow-yaml-node
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-yaml-node"
-         (yaml--any (yaml--parse-from-grammar 'c-ns-alias-node)
-                    (yaml--parse-from-grammar 'ns-flow-yaml-content n c)
-                    (yaml--all (yaml--parse-from-grammar 'c-ns-properties n c)
-                               (yaml--any (yaml--all (yaml--parse-from-grammar 's-separate n c)
-                                                     (yaml--parse-from-grammar 'ns-flow-yaml-content n c))
-                                          (yaml--parse-from-grammar 'e-scalar)))))))
+         (yaml--any
+          (yaml--parse-from-grammar 'c-ns-alias-node)
+          (yaml--parse-from-grammar 'ns-flow-yaml-content n c)
+          (yaml--all
+           (yaml--parse-from-grammar 'c-ns-properties n c)
+           (yaml--any
+            (yaml--all
+             (yaml--parse-from-grammar 's-separate n c)
+             (yaml--parse-from-grammar 'ns-flow-yaml-content n c))
+            (yaml--parse-from-grammar 'e-scalar)))))))
 
     ('ns-yaml-version
      (yaml--frame "ns-yaml-version"
-       (yaml--all (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-dec-digit)))
+       (yaml--all (yaml--rep 1 nil
+                    (lambda () (yaml--parse-from-grammar 'ns-dec-digit)))
                   (yaml--chr ?\.)
-                  (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-dec-digit))))))
+                  (yaml--rep 1 nil
+                    (lambda () (yaml--parse-from-grammar 'ns-dec-digit))))))
 
     ('c-folded
      (yaml--frame "c-folded" (yaml--chr ?\>)))
@@ -1420,31 +1563,38 @@ Rules for this function are defined by the yaml-spec JSON file."
        (yaml--frame "s-nb-spaced-text"
          (yaml--all (yaml--parse-from-grammar 's-indent n)
                     (yaml--parse-from-grammar 's-white)
-                    (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-char)))))))
+                    (yaml--rep2 0 nil
+                      (lambda () (yaml--parse-from-grammar 'nb-char)))))))
 
     ('l-folded-content
      (let ((n (nth 0 args))
            (tt (nth 1 args)))
        (yaml--frame "l-folded-content"
-         (yaml--all (yaml--rep 0 1 (lambda ()
-                                     (yaml--all (yaml--parse-from-grammar 'l-nb-diff-lines n)
-                                                (yaml--parse-from-grammar 'b-chomped-last tt))))
-                    (yaml--parse-from-grammar 'l-chomped-empty n tt))))) ;; TODO: don't use yaml--state-t here
+         (yaml--all
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all (yaml--parse-from-grammar 'l-nb-diff-lines n)
+                         (yaml--parse-from-grammar 'b-chomped-last tt))))
+          (yaml--parse-from-grammar 'l-chomped-empty n tt)))))
 
     ('nb-ns-plain-in-line
      (let ((c (nth 0 args)))
        (yaml--frame "nb-ns-plain-in-line"
          (yaml--rep2 0 nil
-                     (lambda () (yaml--all
-                                 (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))
-                                 (yaml--parse-from-grammar 'ns-plain-char c)))))))
+           (lambda () (yaml--all
+                       (yaml--rep2 0 nil
+                         (lambda () (yaml--parse-from-grammar 's-white)))
+                       (yaml--parse-from-grammar 'ns-plain-char c)))))))
 
     ('nb-single-multi-line
      (let ((n (nth 0 args)))
        (yaml--frame "nb-single-multi-line"
-         (yaml--all (yaml--parse-from-grammar 'nb-ns-single-in-line)
-                    (yaml--any (yaml--parse-from-grammar 's-single-next-line n)
-                               (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'nb-ns-single-in-line)
+          (yaml--any
+           (yaml--parse-from-grammar 's-single-next-line n)
+           (yaml--rep2 0 nil
+             (lambda () (yaml--parse-from-grammar 's-white))))))))
 
     ('l-document-suffix
      (yaml--frame "l-document-suffix"
@@ -1457,15 +1607,21 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-l-block-map-entry
      (yaml--frame "ns-l-block-map-entry"
-       (yaml--any (yaml--parse-from-grammar 'c-l-block-map-explicit-entry (nth 0 args))
-                  (yaml--parse-from-grammar 'ns-l-block-map-implicit-entry (nth 0 args)))))
+       (yaml--any
+        (yaml--parse-from-grammar 'c-l-block-map-explicit-entry
+                                  (nth 0 args))
+        (yaml--parse-from-grammar 'ns-l-block-map-implicit-entry
+                                  (nth 0 args)))))
 
     ('ns-l-compact-mapping
      (yaml--frame "ns-l-compact-mapping"
-       (yaml--all (yaml--parse-from-grammar 'ns-l-block-map-entry (nth 0 args))
-                  (yaml--rep2 0 nil
-                              (lambda () (yaml--all (yaml--parse-from-grammar 's-indent (nth 0 args))
-                                                    (yaml--parse-from-grammar 'ns-l-block-map-entry (nth 0 args))))))))
+       (yaml--all
+        (yaml--parse-from-grammar 'ns-l-block-map-entry (nth 0 args))
+        (yaml--rep2 0 nil
+          (lambda ()
+            (yaml--all
+             (yaml--parse-from-grammar 's-indent (nth 0 args))
+             (yaml--parse-from-grammar 'ns-l-block-map-entry (nth 0 args))))))))
 
     ('ns-esc-space
      (yaml--frame "ns-esc-space" (yaml--chr ?\x20)))
@@ -1475,9 +1631,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-s-implicit-yaml-key
      (let ((c (nth 0 args)))
        (yaml--frame "ns-s-implicit-yaml-key"
-         (yaml--all (yaml--max 1024)
-                    (yaml--parse-from-grammar 'ns-flow-yaml-node nil c)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
+         (yaml--all
+          (yaml--max 1024)
+          (yaml--parse-from-grammar 'ns-flow-yaml-node nil c)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
 
     ('b-l-folded
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -1489,12 +1647,21 @@ Rules for this function are defined by the yaml-spec JSON file."
      (yaml--frame "s-l+block-collection"
        (yaml--all
         (yaml--rep 0 1
-                   (lambda () (yaml--all
-                               (yaml--parse-from-grammar 's-separate (+ (nth 0 args) 1) (nth 1 args))
-                               (yaml--parse-from-grammar 'c-ns-properties (+ (nth 0 args) 1) (nth 1 args)))))
+          (lambda ()
+            (yaml--all
+             (yaml--parse-from-grammar
+              's-separate
+              (+ (nth 0 args) 1)
+              (nth 1 args))
+             (yaml--parse-from-grammar
+              'c-ns-properties
+              (+ (nth 0 args) 1)
+              (nth 1 args)))))
         (yaml--parse-from-grammar 's-l-comments)
         (yaml--any
-         (yaml--parse-from-grammar 'l+block-sequence (yaml--parse-from-grammar 'seq-spaces (nth 0 args) (nth 1 args)))
+         (yaml--parse-from-grammar
+          'l+block-sequence
+          (yaml--parse-from-grammar 'seq-spaces (nth 0 args) (nth 1 args)))
          (yaml--parse-from-grammar 'l+block-mapping (nth 0 args))))))
 
     ('c-quoted-quote
@@ -1502,15 +1669,21 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('l+block-sequence
      (yaml--frame "l+block-sequence"
-       ;; NOTE: deviated from the spec example here by making new-m at least 1.  The wording and examples lead me to believe this is how it's done.
+       ;; NOTE: deviated from the spec example here by making new-m at least 1.
+       ;; The wording and examples lead me to believe this is how it's done.
        ;; ie /* For some fixed auto-detected m > 0 */
        (let ((new-m (max (yaml--auto-detect-indent (nth 0 args)) 1)))
-         (yaml--all (yaml--set m new-m)
-                    (yaml--rep 1 nil
-                               (lambda ()
-                                 (yaml--all
-                                  (yaml--parse-from-grammar 's-indent (+ (nth 0 args) new-m))
-                                  (yaml--parse-from-grammar 'c-l-block-seq-entry (+ (nth 0 args) new-m)))))))))
+         (yaml--all
+          (yaml--set m new-m)
+          (yaml--rep 1 nil
+            (lambda ()
+              (yaml--all
+               (yaml--parse-from-grammar
+                's-indent
+                (+ (nth 0 args) new-m))
+               (yaml--parse-from-grammar
+                'c-l-block-seq-entry
+                (+ (nth 0 args) new-m)))))))))
 
     ('c-double-quote
      (yaml--frame "c-double-quote"
@@ -1540,27 +1713,32 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-flow-node
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-node"
-         (yaml--any (yaml--parse-from-grammar 'c-ns-alias-node)
-                    (yaml--parse-from-grammar 'ns-flow-content n c)
-                    (yaml--all (yaml--parse-from-grammar 'c-ns-properties n c)
-                               (yaml--any (yaml--all (yaml--parse-from-grammar 's-separate n c)
-                                                     (yaml--parse-from-grammar 'ns-flow-content n c))
-                                          (yaml--parse-from-grammar 'e-scalar)))))))
+         (yaml--any
+          (yaml--parse-from-grammar 'c-ns-alias-node)
+          (yaml--parse-from-grammar 'ns-flow-content n c)
+          (yaml--all
+           (yaml--parse-from-grammar 'c-ns-properties n c)
+           (yaml--any
+            (yaml--all (yaml--parse-from-grammar 's-separate n c)
+                       (yaml--parse-from-grammar 'ns-flow-content n c))
+            (yaml--parse-from-grammar 'e-scalar)))))))
 
     ('c-non-specific-tag
      (yaml--frame "c-non-specific-tag" (yaml--chr ?\!)))
 
     ('l-directive-document
      (yaml--frame "l-directive-document"
-       (yaml--all (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'l-directive)))
+       (yaml--all (yaml--rep 1 nil
+                    (lambda () (yaml--parse-from-grammar 'l-directive)))
                   (yaml--parse-from-grammar 'l-explicit-document))))
 
     ('c-l-block-map-explicit-entry
      (let ((n (nth 0 args)))
        (yaml--frame "c-l-block-map-explicit-entry"
-         (yaml--all (yaml--parse-from-grammar 'c-l-block-map-explicit-key n)
-                    (yaml--any (yaml--parse-from-grammar 'l-block-map-explicit-value n)
-                               (yaml--parse-from-grammar 'e-node))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'c-l-block-map-explicit-key n)
+          (yaml--any (yaml--parse-from-grammar 'l-block-map-explicit-value n)
+                     (yaml--parse-from-grammar 'e-node))))))
 
     ('e-node
      (yaml--frame "e-node"
@@ -1576,32 +1754,39 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('l-yaml-stream
      (yaml--frame "l-yaml-stream"
        (yaml--all
-        (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
-        (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-any-document)))
         (yaml--rep2 0 nil
-                    (lambda ()
-                      (yaml--any (yaml--all
-                                  (yaml--rep 1 nil
-                                             (lambda () (yaml--parse-from-grammar 'l-document-suffix)))
-                                  (yaml--rep2 0 nil
-                                              (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
-                                  (yaml--rep 0 1
-                                             (lambda () (yaml--parse-from-grammar 'l-any-document))))
-                                 (yaml--all
-                                  (yaml--rep2 0 nil
-                                              (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
-                                  (yaml--rep 0 1
-                                             (lambda () (yaml--parse-from-grammar 'l-explicit-document))))))))))
+          (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
+        (yaml--rep 0 1
+          (lambda () (yaml--parse-from-grammar 'l-any-document)))
+        (yaml--rep2 0 nil
+          (lambda ()
+            (yaml--any
+             (yaml--all
+              (yaml--rep 1 nil
+                (lambda () (yaml--parse-from-grammar 'l-document-suffix)))
+              (yaml--rep2 0 nil
+                (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
+              (yaml--rep 0 1
+                (lambda () (yaml--parse-from-grammar 'l-any-document))))
+             (yaml--all
+              (yaml--rep2 0 nil
+                (lambda () (yaml--parse-from-grammar 'l-document-prefix)))
+              (yaml--rep 0 1
+                (lambda ()
+                  (yaml--parse-from-grammar 'l-explicit-document))))))))))
 
     ('nb-double-one-line
      (yaml--frame "nb-double-one-line"
-       (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-double-char)))))
+       (yaml--rep2 0 nil
+         (lambda () (yaml--parse-from-grammar 'nb-double-char)))))
 
     ('s-l-comments
      (yaml--frame "s-l-comments"
-       (yaml--all (yaml--any (yaml--parse-from-grammar 's-b-comment)
-                             (yaml--start-of-line))
-                  (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment))))))
+       (yaml--all (yaml--any
+                   (yaml--parse-from-grammar 's-b-comment)
+                   (yaml--start-of-line))
+                  (yaml--rep2 0 nil
+                    (lambda () (yaml--parse-from-grammar 'l-comment))))))
 
     ('nb-char
      (yaml--frame "nb-char"
@@ -1612,51 +1797,56 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-plain-first
      (let ((c (nth 0 args)))
        (yaml--frame "ns-plain-first"
-         (yaml--any (yaml--but (lambda () (yaml--parse-from-grammar 'ns-char))
-                               (lambda () (yaml--parse-from-grammar 'c-indicator)))
-                    (yaml--all (yaml--any (yaml--chr ?\?)
-                                          (yaml--chr ?\:)
-                                          (yaml--chr ?\-))
-                               (yaml--chk "=" (yaml--parse-from-grammar 'ns-plain-safe c)))))))
+         (yaml--any
+          (yaml--but (lambda () (yaml--parse-from-grammar 'ns-char))
+                     (lambda () (yaml--parse-from-grammar 'c-indicator)))
+          (yaml--all
+           (yaml--any (yaml--chr ?\?)
+                      (yaml--chr ?\:)
+                      (yaml--chr ?\-))
+           (yaml--chk "=" (yaml--parse-from-grammar 'ns-plain-safe c)))))))
 
     ('c-ns-esc-char
      (yaml--frame "c-ns-esc-char"
-       (yaml--all (yaml--chr ?\\)
-                  (yaml--any (yaml--parse-from-grammar 'ns-esc-null)
-                             (yaml--parse-from-grammar 'ns-esc-bell)
-                             (yaml--parse-from-grammar 'ns-esc-backspace)
-                             (yaml--parse-from-grammar 'ns-esc-horizontal-tab)
-                             (yaml--parse-from-grammar 'ns-esc-line-feed)
-                             (yaml--parse-from-grammar 'ns-esc-vertical-tab)
-                             (yaml--parse-from-grammar 'ns-esc-form-feed)
-                             (yaml--parse-from-grammar 'ns-esc-carriage-return)
-                             (yaml--parse-from-grammar 'ns-esc-escape)
-                             (yaml--parse-from-grammar 'ns-esc-space)
-                             (yaml--parse-from-grammar 'ns-esc-double-quote)
-                             (yaml--parse-from-grammar 'ns-esc-slash)
-                             (yaml--parse-from-grammar 'ns-esc-backslash)
-                             (yaml--parse-from-grammar 'ns-esc-next-line)
-                             (yaml--parse-from-grammar 'ns-esc-non-breaking-space)
-                             (yaml--parse-from-grammar 'ns-esc-line-separator)
-                             (yaml--parse-from-grammar 'ns-esc-paragraph-separator)
-                             (yaml--parse-from-grammar 'ns-esc-8-bit)
-                             (yaml--parse-from-grammar 'ns-esc-16-bit)
-                             (yaml--parse-from-grammar 'ns-esc-32-bit)))))
+       (yaml--all
+        (yaml--chr ?\\)
+        (yaml--any (yaml--parse-from-grammar 'ns-esc-null)
+                   (yaml--parse-from-grammar 'ns-esc-bell)
+                   (yaml--parse-from-grammar 'ns-esc-backspace)
+                   (yaml--parse-from-grammar 'ns-esc-horizontal-tab)
+                   (yaml--parse-from-grammar 'ns-esc-line-feed)
+                   (yaml--parse-from-grammar 'ns-esc-vertical-tab)
+                   (yaml--parse-from-grammar 'ns-esc-form-feed)
+                   (yaml--parse-from-grammar 'ns-esc-carriage-return)
+                   (yaml--parse-from-grammar 'ns-esc-escape)
+                   (yaml--parse-from-grammar 'ns-esc-space)
+                   (yaml--parse-from-grammar 'ns-esc-double-quote)
+                   (yaml--parse-from-grammar 'ns-esc-slash)
+                   (yaml--parse-from-grammar 'ns-esc-backslash)
+                   (yaml--parse-from-grammar 'ns-esc-next-line)
+                   (yaml--parse-from-grammar 'ns-esc-non-breaking-space)
+                   (yaml--parse-from-grammar 'ns-esc-line-separator)
+                   (yaml--parse-from-grammar 'ns-esc-paragraph-separator)
+                   (yaml--parse-from-grammar 'ns-esc-8-bit)
+                   (yaml--parse-from-grammar 'ns-esc-16-bit)
+                   (yaml--parse-from-grammar 'ns-esc-32-bit)))))
 
     ('ns-flow-map-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-map-entry"
-         (yaml--any (yaml--all (yaml--chr ?\?)
-                               (yaml--parse-from-grammar 's-separate n c)
-                               (yaml--parse-from-grammar 'ns-flow-map-explicit-entry n c))
-                    (yaml--parse-from-grammar 'ns-flow-map-implicit-entry n c)))))
+         (yaml--any
+          (yaml--all (yaml--chr ?\?)
+                     (yaml--parse-from-grammar 's-separate n c)
+                     (yaml--parse-from-grammar 'ns-flow-map-explicit-entry n c))
+          (yaml--parse-from-grammar 'ns-flow-map-implicit-entry n c)))))
 
     ('l-explicit-document
      (yaml--frame "l-explicit-document"
-       (yaml--all (yaml--parse-from-grammar 'c-directives-end)
-                  (yaml--any (yaml--parse-from-grammar 'l-bare-document)
-                             (yaml--all (yaml--parse-from-grammar 'e-node)
-                                        (yaml--parse-from-grammar 's-l-comments))))))
+       (yaml--all
+        (yaml--parse-from-grammar 'c-directives-end)
+        (yaml--any (yaml--parse-from-grammar 'l-bare-document)
+                   (yaml--all (yaml--parse-from-grammar 'e-node)
+                              (yaml--parse-from-grammar 's-l-comments))))))
 
     ('s-white
      (yaml--frame "s-white"
@@ -1666,8 +1856,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('l-keep-empty
      (let ((n (nth 0 args)))
        (yaml--frame "l-keep-empty"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'l-trail-comments n)))))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 'l-trail-comments n)))))))
 
     ('ns-tag-prefix
      (yaml--frame "ns-tag-prefix"
@@ -1677,11 +1870,14 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('c-l+folded
      (let ((n (nth 0 args)))
        (yaml--frame "c-l+folded"
-         (yaml--all (yaml--chr ?\>)
-                    (yaml--parse-from-grammar 'c-b-block-header (yaml--state-curr-m) (yaml--state-curr-t))
-                    (yaml--parse-from-grammar 'l-folded-content
-                                              (max (+ n (yaml--state-curr-m)) 1)
-                                              (yaml--state-curr-t))))))
+         (yaml--all
+          (yaml--chr ?\>)
+          (yaml--parse-from-grammar 'c-b-block-header
+                                    (yaml--state-curr-m)
+                                    (yaml--state-curr-t))
+          (yaml--parse-from-grammar 'l-folded-content
+                                    (max (+ n (yaml--state-curr-m)) 1)
+                                    (yaml--state-curr-t))))))
 
     ('ns-directive-name
      (yaml--frame "ns-directive-name"
@@ -1695,8 +1891,11 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-plain-multi-line
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-plain-multi-line"
-         (yaml--all (yaml--parse-from-grammar 'ns-plain-one-line c)
-                    (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-ns-plain-next-line n c)))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'ns-plain-one-line c)
+          (yaml--rep2 0 nil
+            (lambda ()
+              (yaml--parse-from-grammar 's-ns-plain-next-line n c)))))))
 
     ('ns-char
      (yaml--frame "ns-char"
@@ -1710,17 +1909,27 @@ Rules for this function are defined by the yaml-spec JSON file."
      (yaml--frame "c-l-block-seq-entry"
        (yaml--all (yaml--chr ?\-)
                   (yaml--chk "!" (yaml--parse-from-grammar 'ns-char))
-                  (yaml--parse-from-grammar 's-l+block-indented (nth 0 args) "block-in"))))
+                  (yaml--parse-from-grammar 's-l+block-indented
+                                            (nth 0 args)
+                                            "block-in"))))
 
     ('c-ns-properties
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-properties"
-         (yaml--any (yaml--all (yaml--parse-from-grammar 'c-ns-tag-property)
-                               (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 's-separate n c) (yaml--parse-from-grammar 'c-ns-anchor-property)))))
-                    (yaml--all (yaml--parse-from-grammar 'c-ns-anchor-property)
-                               (yaml--rep 0 1 (lambda () (yaml--all
-                                                          (yaml--parse-from-grammar 's-separate n c)
-                                                          (yaml--parse-from-grammar 'c-ns-tag-property)))))))))
+         (yaml--any
+          (yaml--all
+           (yaml--parse-from-grammar 'c-ns-tag-property)
+           (yaml--rep 0 1
+             (lambda ()
+               (yaml--all
+                (yaml--parse-from-grammar 's-separate n c)
+                (yaml--parse-from-grammar 'c-ns-anchor-property)))))
+          (yaml--all
+           (yaml--parse-from-grammar 'c-ns-anchor-property)
+           (yaml--rep 0 1
+             (lambda () (yaml--all
+                         (yaml--parse-from-grammar 's-separate n c)
+                         (yaml--parse-from-grammar 'c-ns-tag-property)))))))))
 
     ('ns-directive-parameter
      (yaml--frame "ns-directive-parameter"
@@ -1734,24 +1943,31 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-global-tag-prefix
      (yaml--frame "ns-global-tag-prefix"
-       (yaml--all (yaml--parse-from-grammar 'ns-tag-char)
-                  (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char))))))
+       (yaml--all
+        (yaml--parse-from-grammar 'ns-tag-char)
+        (yaml--rep2 0 nil
+          (lambda () (yaml--parse-from-grammar 'ns-uri-char))))))
 
     ('c-ns-flow-pair-json-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-flow-pair-json-key-entry"
-         (yaml--all (yaml--parse-from-grammar 'c-s-implicit-json-key "flow-key")
-                    (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c)))))
+         (yaml--all
+          (yaml--parse-from-grammar 'c-s-implicit-json-key "flow-key")
+          (yaml--parse-from-grammar 'c-ns-flow-map-adjacent-value n c)))))
 
     ('l-literal-content
      (let ((n (nth 0 args))
            (tt (nth 1 args)))
        (yaml--frame "l-literal-content"
-         (yaml--all (yaml--rep 0 1
-                               (lambda () (yaml--all (yaml--parse-from-grammar 'l-nb-literal-text n)
-                                                     (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'b-nb-literal-next n)))
-                                                     (yaml--parse-from-grammar 'b-chomped-last tt))))
-                    (yaml--parse-from-grammar 'l-chomped-empty n tt)))))
+         (yaml--all
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all (yaml--parse-from-grammar 'l-nb-literal-text n)
+                         (yaml--rep2 0 nil
+                           (lambda ()
+                             (yaml--parse-from-grammar 'b-nb-literal-next n)))
+                         (yaml--parse-from-grammar 'b-chomped-last tt))))
+          (yaml--parse-from-grammar 'l-chomped-empty n tt)))))
 
     ('c-document-end
      (yaml--frame "c-document-end"
@@ -1770,8 +1986,13 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('s-b-comment
      (yaml--frame "s-b-comment"
-       (yaml--all (yaml--rep 0 1 (lambda () (yaml--all (yaml--parse-from-grammar 's-separate-in-line)
-                                                       (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'c-nb-comment-text))))))
+       (yaml--all
+        (yaml--rep 0 1
+          (lambda ()
+            (yaml--all
+             (yaml--parse-from-grammar 's-separate-in-line)
+             (yaml--rep 0 1
+               (lambda () (yaml--parse-from-grammar 'c-nb-comment-text))))))
                   (yaml--parse-from-grammar 'b-comment))))
 
     ('s-block-line-prefix
@@ -1810,13 +2031,18 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('b-l-trimmed
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "b-l-trimmed"
-         (yaml--all (yaml--parse-from-grammar 'b-non-content)
-                    (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'l-empty n c)))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'b-non-content)
+          (yaml--rep 1 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n c)))))))
 
     ('l-document-prefix
      (yaml--frame "l-document-prefix"
-       (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'c-byte-order-mark)))
-                  (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-comment))))))
+       (yaml--all
+        (yaml--rep 0 1
+          (lambda () (yaml--parse-from-grammar 'c-byte-order-mark)))
+        (yaml--rep2 0 nil
+          (lambda () (yaml--parse-from-grammar 'l-comment))))))
 
     ('c-byte-order-mark
      (yaml--frame "c-byte-order-mark" (yaml--chr ?\xFEFF)))
@@ -1827,16 +2053,20 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-double-escaped
      (let ((n (nth 0 args)))
        (yaml--frame "s-double-escaped"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))
-                    (yaml--chr ?\\)
-                    (yaml--parse-from-grammar 'b-non-content)
-                    (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "flow-in")))
-                    (yaml--parse-from-grammar 's-flow-line-prefix n)))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 's-white)))
+          (yaml--chr ?\\)
+          (yaml--parse-from-grammar 'b-non-content)
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n "flow-in")))
+          (yaml--parse-from-grammar 's-flow-line-prefix n)))))
 
     ('ns-esc-32-bit
      (yaml--frame "ns-esc-32-bit"
-       (yaml--all (yaml--chr ?U)
-                  (yaml--rep 8 8 (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
+       (yaml--all
+        (yaml--chr ?U)
+        (yaml--rep 8 8 (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
 
 
     ('b-non-content
@@ -1854,13 +2084,17 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-double-next-line
      (let ((n (nth 0 args)))
        (yaml--frame "s-double-next-line"
-         (yaml--all (yaml--parse-from-grammar 's-double-break n)
-                    (yaml--rep 0 1
-                               (lambda ()
-                                 (yaml--all (yaml--parse-from-grammar 'ns-double-char)
-                                            (yaml--parse-from-grammar 'nb-ns-double-in-line)
-                                            (yaml--any (yaml--parse-from-grammar 's-double-next-line n)
-                                                       (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-double-break n)
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all
+               (yaml--parse-from-grammar 'ns-double-char)
+               (yaml--parse-from-grammar 'nb-ns-double-in-line)
+               (yaml--any
+                (yaml--parse-from-grammar 's-double-next-line n)
+                (yaml--rep2 0 nil
+                  (lambda () (yaml--parse-from-grammar 's-white)))))))))))
 
     ('ns-esc-non-breaking-space
      (yaml--frame "ns-esc-non-breaking-space" (yaml--chr ?\_)))
@@ -1868,42 +2102,54 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('l-nb-diff-lines
      (let ((n (nth 0 args)))
        (yaml--frame "l-nb-diff-lines"
-         (yaml--all (yaml--parse-from-grammar 'l-nb-same-lines n)
-                    (yaml--rep2 0 nil (lambda ()
-                                        (yaml--all (yaml--parse-from-grammar 'b-as-line-feed)
-                                                   (yaml--parse-from-grammar 'l-nb-same-lines n))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'l-nb-same-lines n)
+          (yaml--rep2 0 nil
+            (lambda ()
+              (yaml--all (yaml--parse-from-grammar 'b-as-line-feed)
+                         (yaml--parse-from-grammar 'l-nb-same-lines n))))))))
 
     ('s-flow-folded
      (let ((n (nth 0 args)))
        (yaml--frame "s-flow-folded"
-         (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate-in-line)))
-                    (yaml--parse-from-grammar 'b-l-folded n "flow-in")
-                    (yaml--parse-from-grammar 's-flow-line-prefix n)))))
+         (yaml--all
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate-in-line)))
+          (yaml--parse-from-grammar 'b-l-folded n "flow-in")
+          (yaml--parse-from-grammar 's-flow-line-prefix n)))))
 
     ('ns-flow-map-explicit-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-map-explicit-entry"
-         (yaml--any (yaml--parse-from-grammar 'ns-flow-map-implicit-entry n c)
-                    (yaml--all (yaml--parse-from-grammar 'e-node) (yaml--parse-from-grammar 'e-node))))))
+         (yaml--any
+          (yaml--parse-from-grammar 'ns-flow-map-implicit-entry n c)
+          (yaml--all
+           (yaml--parse-from-grammar 'e-node)
+           (yaml--parse-from-grammar 'e-node))))))
 
     ('ns-l-block-map-implicit-entry
      (yaml--frame "ns-l-block-map-implicit-entry"
-       (yaml--all (yaml--any (yaml--parse-from-grammar 'ns-s-block-map-implicit-key)
-                             (yaml--parse-from-grammar 'e-node))
-                  (yaml--parse-from-grammar 'c-l-block-map-implicit-value (nth 0 args)))))
+       (yaml--all
+        (yaml--any (yaml--parse-from-grammar 'ns-s-block-map-implicit-key)
+                   (yaml--parse-from-grammar 'e-node))
+        (yaml--parse-from-grammar 'c-l-block-map-implicit-value (nth 0 args)))))
 
     ('l-nb-folded-lines
      (let ((n (nth 0 args)))
        (yaml--frame "l-nb-folded-lines"
-         (yaml--all (yaml--parse-from-grammar 's-nb-folded-text n)
-                    (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 'b-l-folded n "block-in")
-                                                            (yaml--parse-from-grammar 's-nb-folded-text n))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-nb-folded-text n)
+          (yaml--rep2 0 nil
+            (lambda ()
+              (yaml--all (yaml--parse-from-grammar 'b-l-folded n "block-in")
+                         (yaml--parse-from-grammar 's-nb-folded-text n))))))))
 
     ('c-l-block-map-explicit-key
      (let ((n (nth 0 args)))
        (yaml--frame "c-l-block-map-explicit-key"
-         (yaml--all (yaml--chr ?\?)
-                    (yaml--parse-from-grammar 's-l+block-indented n "block-out")))))
+         (yaml--all
+          (yaml--chr ?\?)
+          (yaml--parse-from-grammar 's-l+block-indented n "block-out")))))
 
     ('s-separate
      (let ((n (nth 0 args))
@@ -1920,9 +2166,10 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-flow-pair-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-pair-entry"
-         (yaml--any (yaml--parse-from-grammar 'ns-flow-pair-yaml-key-entry n c)
-                    (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)
-                    (yaml--parse-from-grammar 'c-ns-flow-pair-json-key-entry n c)))))
+         (yaml--any
+          (yaml--parse-from-grammar 'ns-flow-pair-yaml-key-entry n c)
+          (yaml--parse-from-grammar 'c-ns-flow-map-empty-key-entry n c)
+          (yaml--parse-from-grammar 'c-ns-flow-pair-json-key-entry n c)))))
 
     ('c-flow-indicator
      (yaml--frame "c-flow-indicator"
@@ -1935,8 +2182,9 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-flow-pair-yaml-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-pair-yaml-key-entry"
-         (yaml--all (yaml--parse-from-grammar 'ns-s-implicit-yaml-key "flow-key")
-                    (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
+         (yaml--all
+          (yaml--parse-from-grammar 'ns-s-implicit-yaml-key "flow-key")
+          (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
 
     ('e-scalar
      (yaml--frame "e-scalar" (yaml--empty)))
@@ -1944,12 +2192,15 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-indent-lt
      (let ((n (nth 0 args)))
        (yaml--frame "s-indent-lt"
-         (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-space)))
-                    (< (length (yaml--match)) n)))))
+         (yaml--all
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 's-space)))
+          (< (length (yaml--match)) n)))))
 
     ('nb-single-one-line
      (yaml--frame "nb-single-one-line"
-       (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-single-char)))))
+       (yaml--rep2 0 nil
+         (lambda () (yaml--parse-from-grammar 'nb-single-char)))))
 
     ('c-collect-entry
      (yaml--frame "c-collect-entry" (yaml--chr ?\,)))
@@ -1957,8 +2208,13 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-l-compact-sequence
      (let ((n (nth 0 args)))
        (yaml--frame "ns-l-compact-sequence"
-         (yaml--all (yaml--parse-from-grammar 'c-l-block-seq-entry n)
-                    (yaml--rep2 0 nil (lambda () (yaml--all (yaml--parse-from-grammar 's-indent n) (yaml--parse-from-grammar 'c-l-block-seq-entry n))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'c-l-block-seq-entry n)
+          (yaml--rep2 0 nil
+            (lambda ()
+              (yaml--all
+               (yaml--parse-from-grammar 's-indent n)
+               (yaml--parse-from-grammar 'c-l-block-seq-entry n))))))))
 
     ('c-comment
      (yaml--frame "c-comment" (yaml--chr ?\#)))
@@ -1981,20 +2237,26 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-flow-pair
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-flow-pair"
-         (yaml--any (yaml--all (yaml--chr ?\?)
-                               (yaml--parse-from-grammar 's-separate n c)
-                               (yaml--parse-from-grammar 'ns-flow-map-explicit-entry n c))
+         (yaml--any
+          (yaml--all (yaml--chr ?\?)
+                     (yaml--parse-from-grammar 's-separate n c)
+                     (yaml--parse-from-grammar 'ns-flow-map-explicit-entry n c))
                     (yaml--parse-from-grammar 'ns-flow-pair-entry n c)))))
 
     ('s-l+block-indented
      (yaml--frame "s-l+block-indented"
        (let ((m (yaml--auto-detect-indent (nth 0 args))))
-         (yaml--any (yaml--all (yaml--parse-from-grammar 's-indent m)
-                               (yaml--any (yaml--parse-from-grammar 'ns-l-compact-sequence (+ (nth 0 args) (+ 1 m)))
-                                          (yaml--parse-from-grammar 'ns-l-compact-mapping (+ (nth 0 args) (+ 1 m)))))
-                    (yaml--parse-from-grammar 's-l+block-node (nth 0 args) (nth 1 args))
-                    (yaml--all (yaml--parse-from-grammar 'e-node)
-                               (yaml--parse-from-grammar 's-l-comments))))))
+         (yaml--any
+          (yaml--all
+           (yaml--parse-from-grammar 's-indent m)
+           (yaml--any
+            (yaml--parse-from-grammar 'ns-l-compact-sequence
+                                      (+ (nth 0 args) (+ 1 m)))
+            (yaml--parse-from-grammar 'ns-l-compact-mapping
+                                      (+ (nth 0 args) (+ 1 m)))))
+          (yaml--parse-from-grammar 's-l+block-node (nth 0 args) (nth 1 args))
+          (yaml--all (yaml--parse-from-grammar 'e-node)
+                     (yaml--parse-from-grammar 's-l-comments))))))
 
     ('c-single-quote
      (yaml--frame "c-single-quote" (yaml--chr ?\')))
@@ -2002,66 +2264,79 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('s-flow-line-prefix
      (let ((n (nth 0 args)))
        (yaml--frame "s-flow-line-prefix"
-         (yaml--all (yaml--parse-from-grammar 's-indent n)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-indent n)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate-in-line)))))))
 
     ('nb-double-char
      (yaml--frame "nb-double-char"
-       (yaml--any (yaml--parse-from-grammar 'c-ns-esc-char)
-                  (yaml--but (lambda () (yaml--parse-from-grammar 'nb-json))
-                             (lambda () (yaml--chr ?\\)) (lambda () (yaml--chr ?\"))))))
+       (yaml--any
+        (yaml--parse-from-grammar 'c-ns-esc-char)
+        (yaml--but (lambda () (yaml--parse-from-grammar 'nb-json))
+                   (lambda () (yaml--chr ?\\)) (lambda () (yaml--chr ?\"))))))
 
     ('l-comment
      (yaml--frame "l-comment"
-       (yaml--all (yaml--parse-from-grammar 's-separate-in-line)
-                  (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'c-nb-comment-text)))
-                  (yaml--parse-from-grammar 'b-comment))))
+       (yaml--all
+        (yaml--parse-from-grammar 's-separate-in-line)
+        (yaml--rep 0 1
+          (lambda () (yaml--parse-from-grammar 'c-nb-comment-text)))
+        (yaml--parse-from-grammar 'b-comment))))
 
     ('ns-hex-digit
      (yaml--frame "ns-hex-digit"
-       (yaml--any (yaml--parse-from-grammar 'ns-dec-digit)
-                  (yaml--chr-range ?\x41 ?\x46)
-                  (yaml--chr-range ?\x61 ?\x66))))
+       (yaml--any
+        (yaml--parse-from-grammar 'ns-dec-digit)
+        (yaml--chr-range ?\x41 ?\x46)
+        (yaml--chr-range ?\x61 ?\x66))))
 
     ('s-l+flow-in-block
      (let ((n (nth 0 args)))
        (yaml--frame "s-l+flow-in-block"
-         (yaml--all (yaml--parse-from-grammar 's-separate (+ n 1) "flow-out")
-                    (yaml--parse-from-grammar 'ns-flow-node (+ n 1) "flow-out")
-                    (yaml--parse-from-grammar 's-l-comments)))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-separate (+ n 1) "flow-out")
+          (yaml--parse-from-grammar 'ns-flow-node (+ n 1) "flow-out")
+          (yaml--parse-from-grammar 's-l-comments)))))
 
     ('c-flow-json-node
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-flow-json-node"
-         (yaml--all (yaml--rep 0 1
-                               (lambda ()
-                                 (yaml--all (yaml--parse-from-grammar 'c-ns-properties n c)
-                                            (yaml--parse-from-grammar 's-separate n c))))
-                    (yaml--parse-from-grammar 'c-flow-json-content n c)))))
+         (yaml--all
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all
+               (yaml--parse-from-grammar 'c-ns-properties n c)
+               (yaml--parse-from-grammar 's-separate n c))))
+          (yaml--parse-from-grammar 'c-flow-json-content n c)))))
 
     ('c-b-block-header
      (let ((m (nth 0 args))
            (tt (nth 1 args)))
        (yaml--frame "c-b-block-header"
-         (yaml--all (yaml--any
-                     (and (not (string-match "\\`[-+][0-9]" (yaml--slice yaml--parsing-position)))
-                          ;; hack to not match this case if there is a number.
-                          (yaml--all
-                           (yaml--parse-from-grammar 'c-indentation-indicator m)
-                           (yaml--parse-from-grammar 'c-chomping-indicator tt)))
-                     (yaml--all
-                      (yaml--parse-from-grammar 'c-chomping-indicator tt)
-                      (yaml--parse-from-grammar 'c-indentation-indicator m)))
+         (yaml--all
+          (yaml--any
+           (and (not (string-match "\\`[-+][0-9]"
+                                   (yaml--slice yaml--parsing-position)))
+                ;; hack to not match this case if there is a number.
+                (yaml--all
+                 (yaml--parse-from-grammar 'c-indentation-indicator m)
+                 (yaml--parse-from-grammar 'c-chomping-indicator tt)))
+           (yaml--all
+            (yaml--parse-from-grammar 'c-chomping-indicator tt)
+            (yaml--parse-from-grammar 'c-indentation-indicator m)))
                     (yaml--parse-from-grammar 's-b-comment)))))
 
     ('ns-esc-8-bit
      (yaml--frame "ns-esc-8-bit"
        (yaml--all (yaml--chr ?\x)
-                  (yaml--rep 2 2 (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
+                  (yaml--rep 2 2
+                    (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
 
     ('ns-anchor-name
      (yaml--frame "ns-anchor-name"
-       (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-anchor-char)))))
+       (yaml--rep 1 nil
+         (lambda () (yaml--parse-from-grammar 'ns-anchor-char)))))
 
     ('ns-esc-slash
      (yaml--frame "ns-esc-slash" (yaml--chr ?\/)))
@@ -2071,7 +2346,8 @@ Rules for this function are defined by the yaml-spec JSON file."
        (yaml--frame "s-nb-folded-text"
          (yaml--all (yaml--parse-from-grammar 's-indent n)
                     (yaml--parse-from-grammar 'ns-char)
-                    (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-char)))))))
+                    (yaml--rep2 0 nil
+                      (lambda () (yaml--parse-from-grammar 'nb-char)))))))
 
     ('ns-word-char
      (yaml--frame "ns-word-char"
@@ -2084,8 +2360,9 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-s-block-map-implicit-key
      (yaml--frame "ns-s-block-map-implicit-key"
-       (yaml--any (yaml--parse-from-grammar 'c-s-implicit-json-key "block-key")
-                  (yaml--parse-from-grammar 'ns-s-implicit-yaml-key "block-key"))))
+       (yaml--any
+        (yaml--parse-from-grammar 'c-s-implicit-json-key "block-key")
+        (yaml--parse-from-grammar 'ns-s-implicit-yaml-key "block-key"))))
 
     ('ns-esc-null (yaml--frame "ns-esc-null" (yaml--chr ?\0)))
 
@@ -2097,21 +2374,32 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('c-ns-local-tag-prefix
      (yaml--frame "c-ns-local-tag-prefix"
-       (yaml--all (yaml--chr ?\!)
-                  (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char))))))
+       (yaml--all
+        (yaml--chr ?\!)
+        (yaml--rep2 0 nil
+          (lambda () (yaml--parse-from-grammar 'ns-uri-char))))))
 
     ('ns-tag-directive
      (yaml--frame "ns-tag-directive"
        (yaml--all (yaml--chr ?T) (yaml--chr ?A) (yaml--chr ?G)
-                  (yaml--parse-from-grammar 's-separate-in-line) (yaml--parse-from-grammar 'c-tag-handle) (yaml--parse-from-grammar 's-separate-in-line) (yaml--parse-from-grammar 'ns-tag-prefix))))
+                  (yaml--parse-from-grammar 's-separate-in-line)
+                  (yaml--parse-from-grammar 'c-tag-handle)
+                  (yaml--parse-from-grammar 's-separate-in-line)
+                  (yaml--parse-from-grammar 'ns-tag-prefix))))
 
     ('c-flow-mapping
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-flow-mapping"
-         (yaml--all (yaml--chr ?\{)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'ns-s-flow-map-entries n (yaml--parse-from-grammar 'in-flow c))))
-                    (yaml--chr ?\})))))
+         (yaml--all
+          (yaml--chr ?\{)
+          (yaml--rep 0 1
+            (lambda () (yaml--parse-from-grammar 's-separate n c)))
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--parse-from-grammar 'ns-s-flow-map-entries
+                                        n
+                                        (yaml--parse-from-grammar 'in-flow c))))
+          (yaml--chr ?\})))))
 
     ('ns-double-char
      (yaml--frame "ns-double-char"
@@ -2132,22 +2420,27 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('nb-ns-double-in-line
      (yaml--frame "nb-ns-double-in-line"
-       (yaml--rep2 0 nil (lambda ()
-                           (yaml--all (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))
-                                      (yaml--parse-from-grammar 'ns-double-char))))))
+       (yaml--rep2 0 nil
+         (lambda ()
+           (yaml--all
+            (yaml--rep2 0 nil
+              (lambda () (yaml--parse-from-grammar 's-white)))
+            (yaml--parse-from-grammar 'ns-double-char))))))
 
     ('s-l+block-node
      (yaml--frame "s-l+block-node"
-       (yaml--any (yaml--parse-from-grammar 's-l+block-in-block (nth 0 args) (nth 1 args))
-                  (yaml--parse-from-grammar 's-l+flow-in-block (nth 0 args)))))
+       (yaml--any
+        (yaml--parse-from-grammar 's-l+block-in-block (nth 0 args) (nth 1 args))
+        (yaml--parse-from-grammar 's-l+flow-in-block (nth 0 args)))))
 
     ('ns-esc-bell
      (yaml--frame "ns-esc-bell" (yaml--chr ?a)))
 
     ('c-named-tag-handle
      (yaml--frame "c-named-tag-handle"
-       (yaml--all (yaml--chr ?\!)
-                  (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-word-char)))
+       (yaml--all
+        (yaml--chr ?\!)
+        (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-word-char)))
                   (yaml--chr ?\!))))
 
     ('s-separate-lines
@@ -2177,18 +2470,26 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('ns-s-flow-map-entries
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "ns-s-flow-map-entries"
-         (yaml--all (yaml--parse-from-grammar 'ns-flow-map-entry n c)
-                    (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                    (yaml--rep 0 1
-                               (lambda ()
-                                 (yaml--all (yaml--chr ?\,)
-                                            (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                                            (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 'ns-s-flow-map-entries n c))))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'ns-flow-map-entry n c)
+          (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all
+               (yaml--chr ?\,)
+               (yaml--rep 0 1
+                 (lambda () (yaml--parse-from-grammar 's-separate n c)))
+               (yaml--rep 0 1
+                 (lambda ()
+                   (yaml--parse-from-grammar 'ns-s-flow-map-entries
+                                             n
+                                             c))))))))))
 
     ('c-nb-comment-text
      (yaml--frame "c-nb-comment-text"
-       (yaml--all (yaml--chr ?\#)
-                  (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-char))))))
+       (yaml--all
+        (yaml--chr ?\#)
+        (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'nb-char))))))
 
     ('ns-dec-digit
      (yaml--frame "ns-dec-digit"
@@ -2209,8 +2510,13 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('s-l+block-in-block
      (yaml--frame "s-l+block-in-block"
-       (yaml--any (yaml--parse-from-grammar 's-l+block-scalar (nth 0 args) (nth 1 args))
-                  (yaml--parse-from-grammar 's-l+block-collection (nth 0 args) (nth 1 args)))))
+       (yaml--any
+        (yaml--parse-from-grammar 's-l+block-scalar
+                                  (nth 0 args)
+                                  (nth 1 args))
+        (yaml--parse-from-grammar 's-l+block-collection
+                                  (nth 0 args)
+                                  (nth 1 args)))))
 
     ('ns-esc-paragraph-separator
      (yaml--frame "ns-esc-paragraph-separator" (yaml--chr ?P)))
@@ -2232,8 +2538,9 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('c-ns-flow-map-empty-key-entry
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-flow-map-empty-key-entry"
-         (yaml--all (yaml--parse-from-grammar 'e-node)
-                    (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
+         (yaml--all
+          (yaml--parse-from-grammar 'e-node)
+          (yaml--parse-from-grammar 'c-ns-flow-map-separate-value n c)))))
 
     ('l-any-document
      (yaml--frame "l-any-document"
@@ -2252,35 +2559,47 @@ Rules for this function are defined by the yaml-spec JSON file."
        (let ((new-m (yaml--auto-detect-indent (nth 0 args))))
          (if (= 0 new-m)
              nil ;; For some fixed auto-detected m > 0 ;; Is this right???
-           (yaml--all (yaml--set m new-m)
-                      (yaml--rep 1 nil
-                                 (lambda ()
-                                   (yaml--all
-                                    (yaml--parse-from-grammar 's-indent (+ (nth 0 args) new-m))
-                                    (yaml--parse-from-grammar 'ns-l-block-map-entry (+ (nth 0 args) new-m))))))))))
+           (yaml--all
+            (yaml--set m new-m)
+            (yaml--rep 1 nil
+              (lambda ()
+                (yaml--all
+                 (yaml--parse-from-grammar 's-indent
+                                           (+ (nth 0 args) new-m))
+                 (yaml--parse-from-grammar 'ns-l-block-map-entry
+                                           (+ (nth 0 args) new-m))))))))))
 
     ('c-ns-flow-map-adjacent-value
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-flow-map-adjacent-value"
-         (yaml--all (yaml--chr ?\:)
-                    (yaml--any (yaml--all (yaml--rep 0 1 (lambda () (yaml--parse-from-grammar 's-separate n c)))
-                                          (yaml--parse-from-grammar 'ns-flow-node n c))
-                               (yaml--parse-from-grammar 'e-node))))))
+         (yaml--all
+          (yaml--chr ?\:)
+          (yaml--any
+           (yaml--all
+            (yaml--rep 0 1
+              (lambda () (yaml--parse-from-grammar 's-separate n c)))
+            (yaml--parse-from-grammar 'ns-flow-node n c))
+           (yaml--parse-from-grammar 'e-node))))))
 
     ('s-single-next-line
      (let ((n (nth 0 args)))
        (yaml--frame "s-single-next-line"
-         (yaml--all (yaml--parse-from-grammar 's-flow-folded n)
-                    (yaml--rep 0 1
-                               (lambda ()
-                                 (yaml--all (yaml--parse-from-grammar 'ns-single-char)
-                                            (yaml--parse-from-grammar 'nb-ns-single-in-line)
-                                            (yaml--any (yaml--parse-from-grammar 's-single-next-line n)
-                                                       (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white)))))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 's-flow-folded n)
+          (yaml--rep 0 1
+            (lambda ()
+              (yaml--all
+               (yaml--parse-from-grammar 'ns-single-char)
+               (yaml--parse-from-grammar 'nb-ns-single-in-line)
+               (yaml--any
+                (yaml--parse-from-grammar 's-single-next-line n)
+                (yaml--rep2 0 nil
+                  (lambda () (yaml--parse-from-grammar 's-white)))))))))))
 
     ('s-separate-in-line
      (yaml--frame "s-separate-in-line"
-       (yaml--any (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 's-white)))
+       (yaml--any (yaml--rep 1 nil
+                    (lambda () (yaml--parse-from-grammar 's-white)))
                   (yaml--start-of-line))))
 
     ('b-comment
@@ -2314,11 +2633,12 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('c-ns-flow-map-separate-value
      (let ((n (nth 0 args)) (c (nth 1 args)))
        (yaml--frame "c-ns-flow-map-separate-value"
-         (yaml--all (yaml--chr ?\:)
-                    (yaml--chk "!" (yaml--parse-from-grammar 'ns-plain-safe c))
-                    (yaml--any (yaml--all (yaml--parse-from-grammar 's-separate n c)
-                                          (yaml--parse-from-grammar 'ns-flow-node n c))
-                               (yaml--parse-from-grammar 'e-node))))))
+         (yaml--all
+          (yaml--chr ?\:)
+          (yaml--chk "!" (yaml--parse-from-grammar 'ns-plain-safe c))
+          (yaml--any (yaml--all (yaml--parse-from-grammar 's-separate n c)
+                                (yaml--parse-from-grammar 'ns-flow-node n c))
+                     (yaml--parse-from-grammar 'e-node))))))
 
     ('in-flow
      (let ((c (nth 0 args)))
@@ -2331,10 +2651,11 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('c-verbatim-tag
      (yaml--frame "c-verbatim-tag"
-       (yaml--all (yaml--chr ?\!)
-                  (yaml--chr ?\<)
-                  (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char)))
-                  (yaml--chr ?\>))))
+       (yaml--all
+        (yaml--chr ?\!)
+        (yaml--chr ?\<)
+        (yaml--rep 1 nil (lambda () (yaml--parse-from-grammar 'ns-uri-char)))
+        (yaml--chr ?\>))))
 
     ('c-literal
      (yaml--frame "c-literal" (yaml--chr ?\|)))
@@ -2345,14 +2666,19 @@ Rules for this function are defined by the yaml-spec JSON file."
     ('nb-double-multi-line
      (let ((n (nth 0 args)))
        (yaml--frame "nb-double-multi-line"
-         (yaml--all (yaml--parse-from-grammar 'nb-ns-double-in-line)
-                    (yaml--any (yaml--parse-from-grammar 's-double-next-line n)
-                               (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 's-white))))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'nb-ns-double-in-line)
+          (yaml--any (yaml--parse-from-grammar 's-double-next-line n)
+                     (yaml--rep2 0 nil
+                       (lambda () (yaml--parse-from-grammar 's-white))))))))
 
     ('b-l-spaced
      (let ((n (nth 0 args)))
        (yaml--frame "b-l-spaced"
-         (yaml--all (yaml--parse-from-grammar 'b-as-line-feed) (yaml--rep2 0 nil (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))))))
+         (yaml--all
+          (yaml--parse-from-grammar 'b-as-line-feed)
+          (yaml--rep2 0 nil
+            (lambda () (yaml--parse-from-grammar 'l-empty n "block-in")))))))
 
     ('ns-flow-yaml-content
      (let ((n (nth 0 args)) (c (nth 1 args)))
@@ -2426,7 +2752,8 @@ auto-detecting the indentation.  Functionality defers to
 
 (defun yaml--alist-to-hash-table (l)
   "Return hash representation of L if it is an alist, nil otherwise."
-  (when (and (listp l) (seq-every-p (lambda (x) (and (consp x) (atom (car x)))) l))
+  (when (and (listp l)
+             (seq-every-p (lambda (x) (and (consp x) (atom (car x)))) l))
     (let ((h (make-hash-table)))
       (seq-map (lambda (cpair)
                  (let* ((k (car cpair))
@@ -2456,19 +2783,20 @@ auto-detecting the indentation"
           (t
            (let ((first t)
                  (indent-string (make-string (* 2 indent) ?\s)))
-             (seq-do (lambda (object)
-                       (if (not first)
-                           (insert "\n" indent-string "- ")
-                         (if auto-indent
-                             (let ((curr-indent (yaml--encode-auto-detect-indent)))
-                               (insert (make-string (- indent curr-indent) ?\s)  "- "))
-                           (insert "\n" indent-string "- "))
-                         (setq first nil))
-                       (yaml--encode-object object (+ indent 2)
-                                            (or
-                                             (hash-table-p object)
-                                             (yaml--alist-to-hash-table object))))
-                     l))))))
+             (seq-do
+              (lambda (object)
+                (if (not first)
+                    (insert "\n" indent-string "- ")
+                  (if auto-indent
+                      (let ((curr-indent (yaml--encode-auto-detect-indent)))
+                        (insert (make-string (- indent curr-indent) ?\s)  "- "))
+                    (insert "\n" indent-string "- "))
+                  (setq first nil))
+                (yaml--encode-object object (+ indent 2)
+                                     (or
+                                      (hash-table-p object)
+                                      (yaml--alist-to-hash-table object))))
+              l))))))
 
 (defun yaml--encode-auto-detect-indent ()
   "Return the amount of indentation at current place in encoding."
@@ -2484,20 +2812,21 @@ line and insert accordingly."
         (t
          (let ((first t)
                (indent-string (make-string indent ?\s)))
-           (maphash (lambda (k v)
-                      (if (not first)
-                          (insert "\n" indent-string)
-                        (if auto-indent
-                            (let ((curr-indent (yaml--encode-auto-detect-indent)))
-                              (when (> curr-indent indent)
-                                (setq indent (+ curr-indent 1)))
-                              (insert (make-string (- indent curr-indent) ?\s)))
-                          (insert "\n" indent-string))
-                        (setq first nil))
-                      (yaml--encode-object k indent nil)
-                      (insert ": ")
-                      (yaml--encode-object v (+ indent 2)))
-                    m)))))
+           (maphash
+            (lambda (k v)
+              (if (not first)
+                  (insert "\n" indent-string)
+                (if auto-indent
+                    (let ((curr-indent (yaml--encode-auto-detect-indent)))
+                      (when (> curr-indent indent)
+                        (setq indent (+ curr-indent 1)))
+                      (insert (make-string (- indent curr-indent) ?\s)))
+                  (insert "\n" indent-string))
+                (setq first nil))
+              (yaml--encode-object k indent nil)
+              (insert ": ")
+              (yaml--encode-object v (+ indent 2)))
+            m)))))
 
 (provide 'yaml)
 
