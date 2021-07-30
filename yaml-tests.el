@@ -341,7 +341,10 @@ key-2: |2-
                                     :object-key-type 'string
                                     :object-type 'alist)
                  '(("key-1" . "  ---\n  ---")
-                   ("key-2" . "  ---\n  ---")))))
+                   ("key-2" . "  ---\n  ---"))))
+  (should (equal (yaml-parse-string "''") ""))
+  (should (equal (yaml-parse-string "foo: ''" :object-type 'alist)
+                 '((foo . "")))))
 
 
 (ert-deftest yaml-parsing-completes ()

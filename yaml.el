@@ -581,13 +581,15 @@ reverse order."
                                (substring x 1)
                              " "))
                          replaced))
-              (replaced (replace-regexp-in-string
-                         "''"
-                         (lambda (x)
-                           (if (> (length x) 1)
-                               (substring x 1)
-                             "'"))
-                         replaced)))
+              (replaced (if (not (equal "''" replaced))
+                            (replace-regexp-in-string
+                             "''"
+                             (lambda (x)
+                               (if (> (length x) 1)
+                                   (substring x 1)
+                                 "'"))
+                             replaced)
+                          replaced)))
          (yaml--scalar-event "single"
                              (substring replaced 1 (1- (length replaced)))))))
     ("c-double-quoted" .
