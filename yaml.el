@@ -1028,11 +1028,17 @@ value.  It defaults to the symbol :false."
   (setq yaml--root nil)
   (setq yaml--anchor-mappings (make-hash-table :test 'equal))
   (setq yaml--resolve-aliases nil)
+  (setq yaml--parsing-null-object
+	(if (plist-member args :null-object)
+	    (plist-get args :null-object)
+	  :null))
+  (setq yaml--parsing-false-object
+	(if (plist-member args :false-object)
+	    (plist-get args :false-object)
+	  :false))
   (let ((object-type (plist-get args :object-type))
         (object-key-type (plist-get args :object-key-type))
-        (sequence-type (plist-get args :sequence-type))
-        (null-object (plist-get args :null-object))
-        (false-object (plist-get args :false-object)))
+        (sequence-type (plist-get args :sequence-type)))
     (cond
      ((or (not object-type)
           (equal object-type 'hash-table))
@@ -1060,8 +1066,6 @@ value.  It defaults to the symbol :false."
      ((equal 'list sequence-type)
       (setq yaml--parsing-sequence-type 'list))
      (t (error "Invalid sequence-type.  sequence-type must be list or array")))
-    (setq yaml--parsing-null-object (or null-object :null))
-    (setq yaml--parsing-false-object (or false-object :false))
     (let ((res (yaml--parse string
                  (yaml--top))))
 
