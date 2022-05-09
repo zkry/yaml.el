@@ -549,7 +549,15 @@ keep: |+
   (should (yaml-test-round-trip
            '((build_the_package (script . "if [ -z \"${CUSTOM}\" ]; then
   ./mvnw package
-fi") (stage . "build"))))))
+fi") (stage . "build")))))
+  (should (yaml-test-round-trip
+           `((deeper . [((foo . bar) (baz . bax))
+                        ((foo . bar) (baz . bax) (bee . bop))])
+             (lower . [((foo . bar) (baz . bax))
+                       ((foo . [((foo . bar) (baz . bax))
+                                ((foo . bar) (baz . bax) (bee . bop))])
+                        (baz . bax)
+                        (bee . bop))])))))
 
 (provide 'yaml-tests)
 
