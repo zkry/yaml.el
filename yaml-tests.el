@@ -540,6 +540,12 @@ keep: |+
   (should (equal
            (yaml-encode [1 2 3])
            "[1, 2, 3]"))
+  (should (equal
+           (yaml-encode `[((foo . bar) (baz . bax))])
+           "\n- foo: bar\n  baz: bax"))
+  (should (equal
+           (yaml-encode `((deeper . [((foo . bar) (baz . bax))])))
+           "\ndeeper: \n- foo: bar\n  baz: bax"))
   (should (yaml-test-round-trip
            '((build_the_package (script . "if [ -z \"${CUSTOM}\" ]; then
   ./mvnw package
