@@ -2800,10 +2800,10 @@ auto-detecting the indentation"
                         (insert (make-string (- indent curr-indent) ?\s)  "- "))
                     (insert "\n" indent-string "- "))
                   (setq first nil))
-                (yaml--encode-object object indent
-                                     (or
-                                      (hash-table-p object)
-                                      (yaml--alist-to-hash-table object))))
+                (if (or (hash-table-p object)
+                        (yaml--alist-to-hash-table object))
+                    (yaml--encode-object object indent t)
+                  (yaml--encode-object object (+ indent 2) nil)))
               l))))))
 
 (defun yaml--encode-auto-detect-indent ()
