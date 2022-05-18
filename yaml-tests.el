@@ -546,14 +546,12 @@ keep: |+
   (should (equal
            (yaml-encode `((deeper . [((foo . bar) (baz . bax))])))
            "\ndeeper: \n- foo: bar\n  baz: bax"))
-  (should (equal
-           (equal (yaml-parse-string
-                   (yaml-encode [1 [2 [3] 2] 1])
-                   :object-type 'alist
-                   :sequence-type 'array)
-                  [[1 [2 [3] 2] 1]])))
-  (should (equal
-           (yaml-test-round-trip `[1 [2 [[4 4 4] 3 ((a . 1) (b . 2) (c . 3)) 3] 2] 1])))
+  (should (equal (yaml-parse-string
+                  (yaml-encode [1 [2 [3] 2] 1])
+                  :object-type 'alist
+                  :sequence-type 'array)
+                 [1 [2 [3] 2] 1]))
+  (should (yaml-test-round-trip `[1 [2 [[4 4 4] 3 ((a . 1) (b . 2) (c . 3)) 3] 2] 1]))
   (should (yaml-test-round-trip
            '((build_the_package (script . "if [ -z \"${CUSTOM}\" ]; then
   ./mvnw package
