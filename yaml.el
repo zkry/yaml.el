@@ -78,6 +78,7 @@ This flag is intended for development purposes.")
 (defvar yaml--parsing-sequence-type nil)
 (defvar yaml--parsing-null-object nil)
 (defvar yaml--parsing-false-object nil)
+(defvar yaml--parsing-store-position nil)
 
 (cl-defstruct (yaml--state (:constructor yaml--state-create)
                            (:copier nil))
@@ -493,7 +494,10 @@ reverse order."
     ("ns-l-compact-sequence" . (lambda ()
                                  (yaml--sequence-start-event nil)))
     ("ns-flow-pair" . (lambda ()
-                        (yaml--mapping-start-event t))))
+                        (yaml--mapping-start-event t)))
+    ("ns-l-block-map-implicit-entry" . (lambda ()))
+    ("ns-l-compact-mapping" . (lambda ()))
+    ("c-l-block-seq-entry" . (lambda ())))
   "List of functions for matched rules that run on the entering of a rule.")
 
 (defconst yaml--grammar-events-out
@@ -751,9 +755,12 @@ repeat for each character in a text.")
            (cond
             ((or (assoc ,name yaml--grammar-events-in)
                  (assoc ,name yaml--grammar-events-out))
-             (list ,name
-                   (substring yaml--parsing-input beg yaml--parsing-position)
-                   ,res-symbol))
+             (let ((str (substring yaml--parsing-input beg yaml--parsing-position)))
+               (list ,name
+                     (if yaml--parsing-store-position
+                         (propertize str 'yaml-position (cons beg yaml--parsing-position))
+                       str)
+                     ,res-symbol)))
             ((equal res-type 'list) (list ,name ,res-symbol))
             ((equal res-type 'literal)
              (substring yaml--parsing-input beg yaml--parsing-position))
@@ -1007,21 +1014,8 @@ then check EXPR at the current position."
            (not ,ok-symbol)
          ,ok-symbol))))
 
-(defun yaml-parse-string (string &rest args)
-  "Parse the YAML value in STRING.  Keyword ARGS are as follows:
-
-OBJECT-TYPE specifies the Lisp object to use for representing
-key-value YAML mappings.  Possible values for OBJECT-TYPE are
-the symbols hash-table, alist, and plist.
-
-SEQUENCE-TYPE specifies the Lisp object to use for representing YAML
-sequences.   Possible values for SEQUENCE-TYPE are the symbols list, and array.
-
-NULL-OBJECT contains the object used to represent the null value.
-It defaults to the symbol :null.
-
-FALSE-OBJECT contains the object used to represent the false
-value.  It defaults to the symbol :false."
+(defun yaml--initialize-parsing-state (args)
+  "Initialize state required for parsing according to plist ARGS."
   (setq yaml--cache nil)
   (setq yaml--object-stack nil)
   (setq yaml--state-stack nil)
@@ -1029,13 +1023,13 @@ value.  It defaults to the symbol :false."
   (setq yaml--anchor-mappings (make-hash-table :test 'equal))
   (setq yaml--resolve-aliases nil)
   (setq yaml--parsing-null-object
-	(if (plist-member args :null-object)
-	    (plist-get args :null-object)
-	  :null))
+	    (if (plist-member args :null-object)
+	        (plist-get args :null-object)
+	      :null))
   (setq yaml--parsing-false-object
-	(if (plist-member args :false-object)
-	    (plist-get args :false-object)
-	  :false))
+	    (if (plist-member args :false-object)
+	        (plist-get args :false-object)
+	      :false))
   (let ((object-type (plist-get args :object-type))
         (object-key-type (plist-get args :object-key-type))
         (sequence-type (plist-get args :sequence-type)))
@@ -1065,30 +1059,58 @@ value.  It defaults to the symbol :false."
       (setq yaml--parsing-sequence-type 'array))
      ((equal 'list sequence-type)
       (setq yaml--parsing-sequence-type 'list))
-     (t (error "Invalid sequence-type.  sequence-type must be list or array")))
-    (let ((res (yaml--parse string
-                 (yaml--top))))
+     (t (error "Invalid sequence-type.  sequence-type must be list or array")))))
 
-      (when (< yaml--parsing-position (length yaml--parsing-input))
-        (error
-         "Unable to parse YAML.  Parser finished before end of input %s/%s"
-         yaml--parsing-position
-         (length yaml--parsing-input)))
-      (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
-      (yaml--walk-events res)
-      (if (zerop (hash-table-count yaml--anchor-mappings))
-          yaml--root
-        ;; Run event processing twice to resolve aliases.
-        (setq yaml--root nil)
-        (setq yaml--resolve-aliases t)
+(defun yaml-parse-string (string &rest args)
+  "Parse the YAML value in STRING.  Keyword ARGS are as follows:
+
+OBJECT-TYPE specifies the Lisp object to use for representing
+key-value YAML mappings.  Possible values for OBJECT-TYPE are
+the symbols hash-table, alist, and plist.
+
+SEQUENCE-TYPE specifies the Lisp object to use for representing YAML
+sequences.   Possible values for SEQUENCE-TYPE are the symbols list, and array.
+
+NULL-OBJECT contains the object used to represent the null value.
+It defaults to the symbol :null.
+
+FALSE-OBJECT contains the object used to represent the false
+value.  It defaults to the symbol :false."
+  (yaml--initialize-parsing-state args)
+  (let ((res (yaml--parse string
+               (yaml--top))))
+    (when (< yaml--parsing-position (length yaml--parsing-input))
+      (error
+       "Unable to parse YAML.  Parser finished before end of input %s/%s"
+       yaml--parsing-position
+       (length yaml--parsing-input)))
+    (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
+    (yaml--walk-events res)
+    (if (zerop (hash-table-count yaml--anchor-mappings))
+        yaml--root
+      ;; Run event processing twice to resolve aliases.
+      (let ((yaml--root nil)
+            (yaml--resolve-aliases t))
         (yaml--walk-events res)
         yaml--root))))
+
+(defun yaml-parse-tree (string)
+  "Parse the YAML value in STRING and return its parse tree."
+  (yaml--initialize-parsing-state nil)
+  (let* ((yaml--parsing-store-position t)
+         (res (yaml--parse string
+                (yaml--top))))
+    (when (< yaml--parsing-position (length yaml--parsing-input))
+      (error
+       "Unable to parse YAML.  Parser finished before end of input %s/%s"
+       yaml--parsing-position
+       (length yaml--parsing-input)))
+    res))
 
 (defun yaml--parse-from-grammar (state &rest args)
   "Parse YAML grammar for given STATE and ARGS.
 
 Rules for this function are defined by the yaml-spec JSON file."
-
   (pcase state
     ('c-flow-sequence
      (let ((n (nth 0 args))
