@@ -79,6 +79,7 @@ This flag is intended for development purposes.")
 (defvar yaml--parsing-null-object nil)
 (defvar yaml--parsing-false-object nil)
 (defvar yaml--parsing-store-position nil)
+(defvar yaml--string-values nil)
 
 (cl-defstruct (yaml--state (:constructor yaml--state-create)
                            (:copier nil))
@@ -278,6 +279,8 @@ This flag is intended for development purposes.")
 (defun yaml--resolve-scalar-tag (scalar)
   "Convert a SCALAR string to it's corresponding object."
   (cond
+   (yaml--string-values
+    scalar)
    ;; tag:yaml.org,2002:null
    ((or (equal "null" scalar)
         (equal "Null" scalar)
@@ -1032,7 +1035,8 @@ then check EXPR at the current position."
 	      :false))
   (let ((object-type (plist-get args :object-type))
         (object-key-type (plist-get args :object-key-type))
-        (sequence-type (plist-get args :sequence-type)))
+        (sequence-type (plist-get args :sequence-type))
+        (string-values (plist-get args :string-values)))
     (cond
      ((or (not object-type)
           (equal object-type 'hash-table))
@@ -1059,7 +1063,9 @@ then check EXPR at the current position."
       (setq yaml--parsing-sequence-type 'array))
      ((equal 'list sequence-type)
       (setq yaml--parsing-sequence-type 'list))
-     (t (error "Invalid sequence-type.  sequence-type must be list or array")))))
+     (t (error "Invalid sequence-type.  sequence-type must be list or array")))
+    (when string-values
+      (setq yaml--string-values t))))
 
 (defun yaml-parse-string (string &rest args)
   "Parse the YAML value in STRING.  Keyword ARGS are as follows:
@@ -1112,7 +1118,8 @@ value.  It defaults to the symbol :false."
   (let ((yaml--parsing-store-position t))
     (yaml-parse-string string
                        :object-type 'alist
-                       :object-key-type 'string)))
+                       :object-key-type 'string
+                       :string-values t)))
 
 (defun yaml--parse-from-grammar (state &rest args)
   "Parse YAML grammar for given STATE and ARGS.
