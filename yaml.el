@@ -1107,6 +1107,13 @@ value.  It defaults to the symbol :false."
        (length yaml--parsing-input)))
     res))
 
+(defun yaml-parse-string-with-pos (string)
+  "Parse the YAML value in STRING, storing positions as text properties."
+  (let ((yaml--parsing-store-position t))
+    (yaml-parse-string string
+                       :object-type 'alist
+                       :object-key-type 'string)))
+
 (defun yaml--parse-from-grammar (state &rest args)
   "Parse YAML grammar for given STATE and ARGS.
 
