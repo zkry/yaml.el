@@ -402,28 +402,28 @@ This flag is intended for development purposes.")
  Note that VALUE may be a complex object here.  STYLE is
  currently unused."
   (let ((top-state (car yaml--state-stack))
-        (value (cond
-                ((stringp value) (yaml--resolve-scalar-tag value))
-                ((listp value) (yaml--format-list value))
-                ((hash-table-p value) (yaml--format-object value))
-                ((vectorp value) value)
-                ((not value) nil))))
+        (value* (cond
+                 ((stringp value) (yaml--resolve-scalar-tag value))
+                 ((listp value) (yaml--format-list value))
+                 ((hash-table-p value) (yaml--format-object value))
+                 ((vectorp value) value)
+                 ((not value) nil))))
     (cond
      ((not top-state)
-      (setq yaml--root value))
+      (setq yaml--root value*))
      ((equal top-state :anchor)
       (let* ((anchor (pop yaml--object-stack))
              (name (nth 1 anchor)))
-        (puthash name value yaml--anchor-mappings)
+        (puthash name value* yaml--anchor-mappings)
         (pop yaml--state-stack)
         (yaml--scalar-event nil value)))
      ((equal top-state :sequence)
       (let ((l (car yaml--object-stack)))
-        (setcar yaml--object-stack (append l (list value)))))
+        (setcar yaml--object-stack (append l (list value*)))))
      ((equal top-state :mapping)
       (progn
         (push :mapping-value yaml--state-stack)
-        (push value yaml--cache)))
+        (push value* yaml--cache)))
      ((equal top-state :mapping-value)
       (progn
         (let ((key (pop yaml--cache))
@@ -434,18 +434,18 @@ This flag is intended for development purposes.")
               (setq key (intern key)))
              ((eql 'keyword yaml--parsing-object-key-type)
               (setq key (intern (format ":%s" key))))))
-          (puthash key value table))
+          (puthash key value* table))
         (pop yaml--state-stack)))
      ((equal top-state :trail-comments)
       (pop yaml--state-stack)
       (let ((comment-text (pop yaml--object-stack)))
-        (unless (stringp value)
+        (unless (stringp value*)
           (error "Trail-comments can't be nested under non-string"))
         (yaml--scalar-event
          style
          (replace-regexp-in-string (concat (regexp-quote comment-text) "\n*\\'")
                                    ""
-                                   value ))))
+                                   value*))))
      ((equal top-state nil))))
   '(:scalar))
 
@@ -1092,7 +1092,7 @@ value.  It defaults to the symbol :false."
        (length yaml--parsing-input)))
     (when yaml--parse-debug (message "Parsed data: %s" (pp-to-string res)))
     (yaml--walk-events res)
-    (if (zerop (hash-table-count yaml--anchor-mappings))
+    (if (hash-table-empty-p yaml--anchor-mappings)
         yaml--root
       ;; Run event processing twice to resolve aliases.
       (let ((yaml--root nil)
