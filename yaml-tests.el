@@ -344,7 +344,20 @@ key-2: |2-
                    ("key-2" . "  ---\n  ---"))))
   (should (equal (yaml-parse-string "''") ""))
   (should (equal (yaml-parse-string "foo: ''" :object-type 'alist)
-                 '((foo . "")))))
+                 '((foo . ""))))
+  ;; anchor should produce same parse as without anchor
+  (should (equal (yaml-parse-string "bill-to:  &id001
+    city:   East Centerville
+    state:  KS
+" :object-type 'alist
+  :object-key-type 'string
+  :string-values t)
+                 (yaml-parse-string "bill-to:
+    city:   East Centerville
+    state:  KS
+" :object-type 'alist
+  :object-key-type 'string
+  :string-values t))))
 
 
 (ert-deftest yaml-parsing-completes ()
