@@ -357,6 +357,35 @@ key-2: |2-
     state:  KS
 " :object-type 'alist
   :object-key-type 'string
+  :string-values t)))
+  ;; anchor should expand to be identical to definition
+  (should (equal (yaml-parse-string "bill-to:  &id001
+    street: |
+            123 Tornado Alley
+            Suite 16
+    city:   East Cenrville
+    state:  KS
+
+ship-to:  *id001
+" :object-type 'alist
+  :object-key-type 'string
+  :string-values t)
+                 (yaml-parse-string "bill-to:
+    street: |
+            123 Tornado Alley
+            Suite 16
+    city:   East Cenrville
+    state:  KS
+
+ship-to:
+    street: |
+            123 Tornado Alley
+            Suite 16
+    city:   East Cenrville
+    state:  KS
+
+" :object-type 'alist
+  :object-key-type 'string
   :string-values t))))
 
 
