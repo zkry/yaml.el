@@ -1115,7 +1115,10 @@ value.  It defaults to the symbol :false."
     res))
 
 (defun yaml-parse-string-with-pos (string)
-  "Parse the YAML value in STRING, storing positions as text properties."
+  "Parse the YAML value in STRING, storing positions as text properties.
+
+NOTE: This is an experimental feature and may experience API
+changes in the future."
   (let ((yaml--parsing-store-position t))
     (yaml-parse-string string
                        :object-type 'alist
