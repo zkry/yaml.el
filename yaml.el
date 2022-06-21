@@ -1064,8 +1064,9 @@ then check EXPR at the current position."
      ((equal 'list sequence-type)
       (setq yaml--parsing-sequence-type 'list))
      (t (error "Invalid sequence-type.  sequence-type must be list or array")))
-    (when string-values
-      (setq yaml--string-values t))))
+    (if string-values
+        (setq yaml--string-values t)
+      (setq yaml--string-values nil))))
 
 (defun yaml-parse-string (string &rest args)
   "Parse the YAML value in STRING.  Keyword ARGS are as follows:
