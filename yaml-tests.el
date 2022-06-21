@@ -386,7 +386,11 @@ ship-to:
 
 " :object-type 'alist
   :object-key-type 'string
-  :string-values t))))
+  :string-values t)))
+  (should (equal (progn
+                   (yaml-parse-string-with-pos "- # Empty\n- abc")
+                   (yaml-parse-string "- # Empty\n- abc"))
+                 [:null "abc"])))
 
 
 (ert-deftest yaml-parsing-completes ()
