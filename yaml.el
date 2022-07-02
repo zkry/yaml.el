@@ -1919,7 +1919,7 @@ Rules for this function are defined by the yaml-spec JSON file."
          (yaml--all
           (yaml--chr ?\>)
           (yaml--parse-from-grammar 'c-b-block-header
-                                    (yaml--state-curr-m)
+                                    n
                                     (yaml--state-curr-t))
           (yaml--parse-from-grammar 'l-folded-content
                                     (max (+ n (yaml--state-curr-m)) 1)
