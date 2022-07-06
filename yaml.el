@@ -761,7 +761,8 @@ repeat for each character in a text.")
              (let ((str (substring yaml--parsing-input beg yaml--parsing-position)))
                (list ,name
                      (if yaml--parsing-store-position
-                         (propertize str 'yaml-position (cons beg yaml--parsing-position))
+                         (propertize str 'yaml-position (cons (1+ beg)
+                                                              (1+ yaml--parsing-position)))
                        str)
                      ,res-symbol)))
             ((equal res-type 'list) (list ,name ,res-symbol))
