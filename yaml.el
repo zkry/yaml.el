@@ -267,7 +267,7 @@ This flag is intended for development purposes.")
            (parsed-header (yaml--parse-block-header header-line))
            (chomp (car parsed-header))
            (starting-spaces-ct
-            (or (and (cadr parsed-header) (+ n (cadr parsed-header)))
+            (or (and (cadr parsed-header) (+ (or n 0) (cadr parsed-header)))
                 (let ((_ (string-match "^\n*\\( *\\)" text-body)))
                   (length (match-string 1 text-body)))))
            (lines (split-string text-body "\n"))
