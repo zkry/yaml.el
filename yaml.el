@@ -261,7 +261,7 @@ This flag is intended for development purposes.")
 (defun yaml--process-literal-text (text)
   "Remove the header line for a folded match and return TEXT body formatted."
   (let ((n (get-text-property 0 'yaml-n text)))
-    (setq text (substring-no-properties text 0 (length text)))
+    (remove-text-properties 0 (length text) '(yaml-n nil) text)
     (let* ((header-line (substring text 0 (string-match "\n" text)))
            (text-body (substring text (1+ (string-match "\n" text))))
            (parsed-header (yaml--parse-block-header header-line))
