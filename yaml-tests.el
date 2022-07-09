@@ -408,7 +408,16 @@ ship-to:
                  '((deeply (nested (value . " test string"))))))
   (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: |-\n           test string"
                                     :object-type 'alist)
-                 '((deeply (nested (value . "test string")))))))
+                 '((deeply (nested (value . "test string"))))))
+  (should (equal (yaml-parse-string ">-\n this is text"
+                                    :object-type 'alist)
+                 "this is text"))
+  (should (equal (yaml-parse-string ">-1\n this is text"
+                                    :object-type 'alist)
+                 "this is text"))
+  (should (equal (yaml-parse-string "top: |1\n  this is text"
+                                    :object-type 'alist)
+                 '((top . " this is text\n")))))
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."

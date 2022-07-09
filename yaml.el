@@ -768,7 +768,7 @@ repeat for each character in a text.")
                                        (cons (1+ beg)
                                              (1+ yaml--parsing-position)))))
                (when (member ,name '("c-l+folded" "c-l+literal"))
-                 (setq str (propertize str 'yaml-n n)))
+                 (setq str (propertize str 'yaml-n (max 0 n))))
                (list ,name
                      (if yaml--parsing-store-position
                          (propertize str 'yaml-position (cons (1+ beg)
