@@ -3,7 +3,7 @@
 ;; Copyright © 2021 Zachary Romero <zkry@posteo.org>
 
 ;; Author: Zachary Romero <zkry@posteo.org>
-;; Version: 0.1.0
+;; Version: 0.5.0
 ;; Homepage: https://github.com/zkry/yaml.el
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools
@@ -44,6 +44,8 @@
 (require 'subr-x)
 (require 'seq)
 (require 'cl-lib)
+
+(defconst yaml-parser-version "0.5.0")
 
 (defvar yaml--parse-debug nil
   "Turn on debugging messages when parsing YAML when non-nil.
@@ -258,22 +260,24 @@ This flag is intended for development purposes.")
 
 (defun yaml--process-literal-text (text)
   "Remove the header line for a folded match and return TEXT body formatted."
-  (let* ((header-line (substring text 0 (string-match "\n" text)))
-         (text-body (substring text (1+ (string-match "\n" text))))
-         (parsed-header (yaml--parse-block-header header-line))
-         (chomp (car parsed-header))
-         (starting-spaces-ct
-          (or (cadr parsed-header)
-              (let ((_ (string-match "^\n*\\( *\\)" text-body)))
-                (length (match-string 1 text-body)))))
-         (lines (split-string text-body "\n"))
-         (striped-lines
-          (seq-map (lambda (l)
-                     (replace-regexp-in-string
-                      (format "\\` \\{0,%d\\}" starting-spaces-ct) "" l))
-                   lines))
-         (text-body (string-join striped-lines "\n")))
-    (yaml--chomp-text text-body chomp)))
+  (let ((n (get-text-property 0 'yaml-n text)))
+    (setq text (substring-no-properties text 0 (length text)))
+    (let* ((header-line (substring text 0 (string-match "\n" text)))
+           (text-body (substring text (1+ (string-match "\n" text))))
+           (parsed-header (yaml--parse-block-header header-line))
+           (chomp (car parsed-header))
+           (starting-spaces-ct
+            (or (and (cadr parsed-header) (+ (or n 0) (cadr parsed-header)))
+                (let ((_ (string-match "^\n*\\( *\\)" text-body)))
+                  (length (match-string 1 text-body)))))
+           (lines (split-string text-body "\n"))
+           (striped-lines
+            (seq-map (lambda (l)
+                       (replace-regexp-in-string
+                        (format "\\` \\{0,%d\\}" starting-spaces-ct) "" l))
+                     lines))
+           (text-body (string-join striped-lines "\n")))
+      (yaml--chomp-text text-body chomp))))
 
 ;; TODO: Process tags and use them in this function.
 (defun yaml--resolve-scalar-tag (scalar)
@@ -759,6 +763,12 @@ repeat for each character in a text.")
             ((or (assoc ,name yaml--grammar-events-in)
                  (assoc ,name yaml--grammar-events-out))
              (let ((str (substring yaml--parsing-input beg yaml--parsing-position)))
+               (when yaml--parsing-store-position
+                 (setq str (propertize str 'yaml-position
+                                       (cons (1+ beg)
+                                             (1+ yaml--parsing-position)))))
+               (when (member ,name '("c-l+folded" "c-l+literal"))
+                 (setq str (propertize str 'yaml-n (max 0 n))))
                (list ,name
                      (if yaml--parsing-store-position
                          (propertize str 'yaml-position (cons (1+ beg)

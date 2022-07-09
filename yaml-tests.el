@@ -390,8 +390,34 @@ ship-to:
   (should (equal (progn
                    (yaml-parse-string-with-pos "- # Empty\n- abc")
                    (yaml-parse-string "- # Empty\n- abc"))
-                 [:null "abc"])))
-
+                 [:null "abc"]))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: >-1\n      test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . " test string"))))))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: >-\n      test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . "test string"))))))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: >-2\n      test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . "test string"))))))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: >-7\n           test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . "test string"))))))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: |-6\n           test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . " test string"))))))
+  (should (equal (yaml-parse-string "deeply:\n  nested:\n    value: |-\n           test string"
+                                    :object-type 'alist)
+                 '((deeply (nested (value . "test string"))))))
+  (should (equal (yaml-parse-string ">-\n this is text"
+                                    :object-type 'alist)
+                 "this is text"))
+  (should (equal (yaml-parse-string ">-1\n this is text"
+                                    :object-type 'alist)
+                 "this is text"))
+  (should (equal (yaml-parse-string "top: |1\n  this is text"
+                                    :object-type 'alist)
+                 '((top . " this is text\n")))))
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."
