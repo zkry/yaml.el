@@ -3,7 +3,7 @@
 ;; Copyright © 2021 Zachary Romero <zkry@posteo.org>
 
 ;; Author: Zachary Romero <zkry@posteo.org>
-;; Version: 0.5.0
+;; Version: 0.5.1
 ;; Homepage: https://github.com/zkry/yaml.el
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools
@@ -45,7 +45,7 @@
 (require 'seq)
 (require 'cl-lib)
 
-(defconst yaml-parser-version "0.5.0")
+(defconst yaml-parser-version "0.5.1")
 
 (defvar yaml--parse-debug nil
   "Turn on debugging messages when parsing YAML when non-nil.
