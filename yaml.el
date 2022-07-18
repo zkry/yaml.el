@@ -932,7 +932,7 @@ This is currently unimplemented."
       (and (yaml--state-curr-doc)
            (yaml--start-of-line)
            (string-match
-            "\\^g(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)"
+            "\\^g\\(?:---|\\.\\.\\.\\)\\([[:blank:]]\\|$\\)"
             (substring yaml--parsing-input yaml--parsing-position)))))
 
 (defun yaml--ord (f)
