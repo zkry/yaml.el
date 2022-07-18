@@ -1084,16 +1084,23 @@ then check EXPR at the current position."
 
 OBJECT-TYPE specifies the Lisp object to use for representing
 key-value YAML mappings.  Possible values for OBJECT-TYPE are
-the symbols hash-table, alist, and plist.
+the symbols `hash-table' (default), `alist', and `plist'.
 
-SEQUENCE-TYPE specifies the Lisp object to use for representing YAML
-sequences.   Possible values for SEQUENCE-TYPE are the symbols list, and array.
+OBJECT-KEY-TYPE specifies the Lisp type to use for keys in
+key-value YAML mappings.  Possible values are the symbols
+`string', `symbol', and `keyword'.  By default, this is `symbol';
+if OBJECT-TYPE is `plist', the default is `keyword' (and `symbol'
+becomes synonym for `keyword').
+
+SEQUENCE-TYPE specifies the Lisp object to use for representing
+YAML sequences.  Possible values for SEQUENCE-TYPE are the symbols
+`list', and `array' (default).
 
 NULL-OBJECT contains the object used to represent the null value.
-It defaults to the symbol :null.
+It defaults to the symbol `:null'.
 
 FALSE-OBJECT contains the object used to represent the false
-value.  It defaults to the symbol :false."
+value.  It defaults to the symbol `:false'."
   (yaml--initialize-parsing-state args)
   (let ((res (yaml--parse string
                (yaml--top))))
