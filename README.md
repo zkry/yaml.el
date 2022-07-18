@@ -18,8 +18,9 @@ The following keyword args are accepted:
   - `alist`
   - `plist`
 - `:object-key-type` specifies how map keys should be handled. It takes the following symbols:
-  - `string` (default)
-  - `symbol` keys of maps will be converted to symbols. Not that this matches the behavior of the JSON parser.
+  - `string`
+  - `symbol` (default) Use symbols as keys.  If `:object-type` is `plist`, this becomes the same as `keyword`.
+  - `keyword` Always use keywords as keys.
 - `:sequence-type` specifies the Lisp data structure to store the
   parsed sequences in.  It takes the following symbols:
   - `array` (default)
