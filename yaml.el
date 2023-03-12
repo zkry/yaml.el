@@ -2402,7 +2402,7 @@ Rules for this function are defined by the yaml-spec JSON file."
 
     ('ns-esc-8-bit
      (yaml--frame "ns-esc-8-bit"
-       (yaml--all (yaml--chr ?\x)
+       (yaml--all (yaml--chr ?x)
                   (yaml--rep 2 2
                     (lambda () (yaml--parse-from-grammar 'ns-hex-digit))))))
 
