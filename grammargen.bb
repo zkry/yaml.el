@@ -17,9 +17,9 @@
 
 ;;; Commentary:
 
-;; This file is the Babashka script used to initially generate the YAML grammer Elisp code.
+;; This file is the Babashka script used to initially generate the YAML grammar Elisp code.
 ;; The program expects to find a yaml-spec-1.2.json file in the same directory and will
-;; generate the elisp code that should go in the main grammer parsing cond.  Due to certain
+;; generate the elisp code that should go in the main grammar parsing cond.  Due to certain
 ;; hand optimizations made in the Elisp code, the output of this program has fell out of sync
 ;; with what is currently in yaml.el (though I don't find this a big problem as the YAML spec
 ;; should never change).
