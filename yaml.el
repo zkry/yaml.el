@@ -244,7 +244,7 @@ This flag is intended for development purposes.")
          text-body)))
 
 (defun yaml--process-folded-text (text)
-  "Remvoe the header line for a folded match and return TEXT body formatted."
+  "Remove the header line for a folded match and return TEXT body formatted."
   (let* ((text (yaml--process-literal-text text))
          (done))
     (while (not done)
