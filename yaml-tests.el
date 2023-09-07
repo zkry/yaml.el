@@ -615,10 +615,10 @@ keep: |+
            "[1, 2, 3]"))
   (should (equal
            (yaml-encode `[((foo . bar) (baz . bax))])
-           "\n- foo: bar\n  baz: bax"))
+           "- foo: bar\n  baz: bax"))
   (should (equal
            (yaml-encode `((deeper . [((foo . bar) (baz . bax))])))
-           "\ndeeper: \n- foo: bar\n  baz: bax"))
+           "deeper: \n- foo: bar\n  baz: bax"))
   (should (equal (yaml-parse-string
                   (yaml-encode [1 [2 [3] 2] 1])
                   :object-type 'alist
