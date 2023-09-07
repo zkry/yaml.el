@@ -2765,6 +2765,9 @@ Rules for this function are defined by the yaml-spec JSON file."
   "Encode OBJECT to a YAML string."
   (with-temp-buffer
     (yaml--encode-object object 0)
+    (goto-char (point-min))
+    (while (looking-at-p "\n")
+      (delete-char 1))
     (buffer-string)))
 
 (defun yaml--encode-object (object indent &optional auto-indent)
