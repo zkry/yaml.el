@@ -89,3 +89,12 @@ translations:
 Since this is implemented in Emacs Lisp performance is probably not the best.  An alternative implementation using libyaml exists and can be found [here](https://github.com/syohex/emacs-libyaml).
 
 If you have a very deeply nested YAML file and your `max-lisp-eval-depth` variable is set too low, these is a chance that you might hit the maximum Lisp eval depth limit.  In the future I may work on changing the parsing algorithm to avoid this problem but in the meantime you can bump up the `max-lisp-eval-depth` variable in your config.
+
+## Development
+
+You can run the tests by executing
+
+```
+$ ~/path/to/git-repo/yaml.el
+$ emacs -batch -l ert -l yaml.el -l yaml-tests.el -f ert-run-tests-batch-and-exit
+```
