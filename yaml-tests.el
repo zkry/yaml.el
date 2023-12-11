@@ -419,7 +419,11 @@ ship-to:
                  "this is text"))
   (should (equal (yaml-parse-string "top: |1\n  this is text"
                                     :object-type 'alist)
-                 '((top . " this is text\n")))))
+                 '((top . " this is text\n"))))
+  (should (equal (yaml-parse-string "top: 0x10" :object-type 'alist)
+                 '((top . 16))))
+  (should (equal (yaml-parse-string "top: 0o10" :object-type 'alist)
+                 '((top . 8)))))
 
 (ert-deftest yaml-parsing-completes ()
   "Tests that the yaml parses."
