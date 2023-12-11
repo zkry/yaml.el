@@ -3,7 +3,7 @@
 ;; Copyright © 2021 Zachary Romero <zkry@posteo.org>
 
 ;; Author: Zachary Romero <zkry@posteo.org>
-;; Version: 0.5.4
+;; Version: 0.5.5
 ;; Homepage: https://github.com/zkry/yaml.el
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools
