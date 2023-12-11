@@ -305,9 +305,9 @@ This flag is intended for development purposes.")
    ((string-match "^[-+]?[0-9]+$" scalar)
     (string-to-number scalar))
    ((string-match "^0o[0-7]+$" scalar)
-    (string-to-number scalar 8))
+    (string-to-number (substring scalar 2) 8))
    ((string-match "^0x[0-9a-fA-F]+$" scalar)
-    (string-to-number scalar 16))
+    (string-to-number (substring scalar 2) 16))
    ;; tag:yaml.org,2002:float
    ((string-match
      "^[-+]?\\(\\.[0-9]+\\|[0-9]+\\(\\.[0-9]*\\)?\\)\\([eE][-+]?[0-9]+\\)?$"
