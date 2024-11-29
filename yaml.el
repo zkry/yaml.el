@@ -1,16 +1,14 @@
 ;;; yaml.el --- YAML parser for Elisp -*- lexical-binding: t -*-
 
-;; Copyright © 2021 Zachary Romero <zkry@posteo.org>
+;; Copyright © 2021-2024  Free Software Foundation, Inc.
 
 ;; Author: Zachary Romero <zkry@posteo.org>
-;; Version: 0.5.5
+;; Version: 1.0.0
 ;; Homepage: https://github.com/zkry/yaml.el
 ;; Package-Requires: ((emacs "25.1"))
 ;; Keywords: tools
 
 ;; yaml.el requires at least GNU Emacs 25.1
-
-;; This file is not part of GNU Emacs
 
 ;; This file is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

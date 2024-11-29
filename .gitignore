@@ -1,1 +1,5 @@
+*.elc
 
+# ELPA-generated files.
+/yaml-autoloads.el
+/yaml-pkg.el
