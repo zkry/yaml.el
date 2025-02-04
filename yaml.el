@@ -1095,20 +1095,20 @@ changes in the future."
   "Parse YAML grammar for given STATE and ARGS.
 
 Rules for this function are defined by the yaml-spec JSON file."
-  (let* ((name (symbol-name state))
+  (let ((name (symbol-name state))
          (beg yaml--parsing-position)
          (_ (when (and yaml--parse-debug
-                       (not (member name yaml--tracing-ignore)))
+                       (not (member (symbol-name state) yaml--tracing-ignore)))
               (message "|%s>%s %40s args=%s '%s'"
                        (make-string (length yaml--states) ?-)
                        (make-string (- 70 (length yaml--states)) ?\s)
-                       name
+                       (symbol-name state)
                        args
                        (replace-regexp-in-string
                         "\n"
                         "↓"
                         (yaml--slice yaml--parsing-position)))))
-         (_ (yaml--push-state name))
+         (_ (yaml--push-state (symbol-name state)))
          (yaml-n)
          (res))
     (pcase state
