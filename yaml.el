@@ -481,82 +481,82 @@ reverse order."
   (setcar yaml--object-stack (reverse (car yaml--object-stack))))
 
 (defconst yaml--grammar-events-in
-  '(("l-yaml-stream" . (lambda ()
+  `(("l-yaml-stream" . ,(lambda ()
                          (yaml--stream-start-event)
                          (setq yaml--document-start-version nil)
                          (setq yaml--document-start-explicit nil)
                          (setq yaml--tag-map (make-hash-table))))
-    ("c-flow-mapping" . (lambda ()
+    ("c-flow-mapping" . ,(lambda ()
                           (yaml--mapping-start-event t)))
-    ("c-flow-sequence" . (lambda ()
+    ("c-flow-sequence" . ,(lambda ()
                            (yaml--sequence-start-event nil)))
-    ("l+block-mapping" . (lambda ()
+    ("l+block-mapping" . ,(lambda ()
                            (yaml--mapping-start-event nil)))
-    ("l+block-sequence" . (lambda ()
+    ("l+block-sequence" . ,(lambda ()
                             (yaml--sequence-start-event nil)))
-    ("ns-l-compact-mapping" . (lambda ()
+    ("ns-l-compact-mapping" . ,(lambda ()
                                 (yaml--mapping-start-event nil)))
-    ("ns-l-compact-sequence" . (lambda ()
+    ("ns-l-compact-sequence" . ,(lambda ()
                                  (yaml--sequence-start-event nil)))
-    ("ns-flow-pair" . (lambda ()
+    ("ns-flow-pair" . ,(lambda ()
                         (yaml--mapping-start-event t)))
-    ("ns-l-block-map-implicit-entry" . (lambda ()))
-    ("ns-l-compact-mapping" . (lambda ()))
-    ("c-l-block-seq-entry" . (lambda ())))
+    ("ns-l-block-map-implicit-entry" . ,(lambda ()))
+    ("ns-l-compact-mapping" . ,(lambda ()))
+    ("c-l-block-seq-entry" . ,(lambda ())))
   "List of functions for matched rules that run on the entering of a rule.")
 
 (defconst yaml--grammar-events-out
-  '(("c-b-block-header" .
-     (lambda (text)
+  `(("c-b-block-header" .
+     ,(lambda (_text)
        nil))
     ("l-yaml-stream" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--check-document-end)
        (yaml--stream-end-event)))
     ("ns-yaml-version" .
-     (lambda (text)
+     ,(lambda (text)
        (when yaml--document-start-version
          (throw 'error "Multiple %YAML directives not allowed."))
        (setq yaml--document-start-version text)))
     ("c-tag-handle" .
-     (lambda (text)
+     ,(lambda (text)
        (setq yaml--tag-handle text)))
     ("ns-tag-prefix" .
-     (lambda (text)
+     ,(lambda (text)
        (puthash yaml--tag-handle text yaml--tag-map)))
     ("c-directives-end" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--check-document-end)
        (setq yaml--document-start-explicit t)))
     ("c-document-end" .
-     (lambda (text)
+     ,(lambda (_text)
        (when (not yaml--document-end)
          (setq yaml--document-end-explicit t))
        (yaml--check-document-end)))
     ("c-flow-mapping" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--mapping-end-event)))
     ("c-flow-sequence" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--sequence-end-event )))
     ("l+block-mapping" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--mapping-end-event)))
     ("l+block-sequence" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--reverse-at-list)
        (yaml--sequence-end-event)))
     ("ns-l-compact-mapping" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--mapping-end-event)))
     ("ns-l-compact-sequence" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--sequence-end-event)))
     ("ns-flow-pair" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--mapping-end-event)))
     ("ns-plain" .
-     (lambda (text)
+     ,(lambda (text)
        (let* ((replaced (if (and (zerop (length yaml--state-stack))
                                  (string-match "\\(^\\|\n\\)\\.\\.\\.\\'" text))
                             ;; Hack to not send the document parse end.
@@ -578,7 +578,7 @@ reverse order."
                          replaced)))
          (yaml--scalar-event "plain" replaced))))
     ("c-single-quoted" .
-     (lambda (text)
+     ,(lambda (text)
        (let* ((replaced (replace-regexp-in-string
                          "\\(?:[ \t]*\r?\n[ \t]*\\)"
                          "\n"
@@ -602,7 +602,7 @@ reverse order."
          (yaml--scalar-event "single"
                              (substring replaced 1 (1- (length replaced)))))))
     ("c-double-quoted" .
-     (lambda (text)
+     ,(lambda (text)
        (let* ((replaced (replace-regexp-in-string
                          "\\(?:[ \t]*\r?\n[ \t]*\\)"
                          "\n"
@@ -655,7 +655,7 @@ reverse order."
               (replaced (substring replaced 1 (1- (length replaced)))))
          (yaml--scalar-event "double" replaced))))
     ("c-l+literal" .
-     (lambda (text)
+     ,(lambda (text)
        (when (equal (car yaml--state-stack) :trail-comments)
          (pop yaml--state-stack)
          (let ((comment-text (pop yaml--object-stack)))
@@ -664,7 +664,7 @@ reverse order."
        (let* ((processed-text (yaml--process-literal-text text)))
          (yaml--scalar-event "folded" processed-text))))
     ("c-l+folded" .
-     (lambda (text)
+     ,(lambda (text)
        (when (equal (car yaml--state-stack) :trail-comments)
          (pop yaml--state-stack)
          (let ((comment-text (pop yaml--object-stack)))
@@ -673,20 +673,20 @@ reverse order."
        (let* ((processed-text (yaml--process-folded-text text)))
          (yaml--scalar-event "folded" processed-text))))
     ("e-scalar" .
-     (lambda (text)
+     ,(lambda (_text)
        (yaml--scalar-event "plain" "null")))
     ("c-ns-anchor-property" .
-     (lambda (text)
+     ,(lambda (text)
        (yaml--anchor-event (substring text 1))))
     ("c-ns-tag-property" .
-     (lambda (text)
+     ,(lambda (_text)
        ;; TODO: Implement tags
        ))
     ("l-trail-comments" .
-     (lambda (text)
+     ,(lambda (text)
        (yaml--trail-comments-event text)))
     ("c-ns-alias-node" .
-     (lambda (text)
+     ,(lambda (text)
        (yaml--alias-event (substring text 1)))))
   "List of functions for matched rules that run on the exiting of a rule.")
 
