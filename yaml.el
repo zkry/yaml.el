@@ -50,21 +50,21 @@
 
 This flag is intended for development purposes.")
 
-(defconst yaml--tracing-ignore '("s-space"
-                                 "s-tab"
-                                 "s-white"
-                                 "l-comment"
-                                 "b-break"
-                                 "b-line-feed"
-                                 "b-carriage-return"
-                                 "s-b-comment"
-                                 "b-comment"
-                                 "l-comment"
-                                 "ns-char"
-                                 "nb-char"
-                                 "b-char"
-                                 "c-printable"
-                                 "b-as-space"))
+(defconst yaml--tracing-ignore '(s-space
+                                 s-tab
+                                 s-white
+                                 l-comment
+                                 b-break
+                                 b-line-feed
+                                 b-carriage-return
+                                 s-b-comment
+                                 b-comment
+                                 l-comment
+                                 ns-char
+                                 nb-char
+                                 b-char
+                                 c-printable
+                                 b-as-space))
 
 (defvar yaml--parsing-input ""
   "The string content of the current item being processed.")
@@ -83,7 +83,7 @@ This flag is intended for development purposes.")
 
 (cl-defstruct (yaml--state (:constructor yaml--state-create)
                            (:copier nil))
-  doc tt m name lvl beg end)
+  doc tt m (name nil :type symbol) lvl beg end)
 
 (defmacro yaml--parse (data &rest forms)
   "Parse DATA according to FORMS."
@@ -100,7 +100,7 @@ This flag is intended for development purposes.")
        :name nil :doc nil :lvl 0 :beg 0 :end 0 :m nil :tt nil)))
 
 (defun yaml--state-set-m (val)
-  "Set the current value of t to VAL."
+  "Set the current value of `m' to VAL."
   (let* ((states yaml--states))
     (while states
       (let* ((top-state (car states))
@@ -185,7 +185,7 @@ This flag is intended for development purposes.")
                                   :end nil))))
 
 (defconst yaml--grammar-resolution-rules
-  '(("ns-plain" . literal))
+  '((ns-plain . literal))
   "Alist determining how to resolve grammar rule.")
 
 ;;; Receiver Functions
@@ -481,81 +481,81 @@ reverse order."
   (setcar yaml--object-stack (reverse (car yaml--object-stack))))
 
 (defconst yaml--grammar-events-in
-  `(("l-yaml-stream" . ,(lambda ()
-                         (yaml--stream-start-event)
-                         (setq yaml--document-start-version nil)
-                         (setq yaml--document-start-explicit nil)
-                         (setq yaml--tag-map (make-hash-table))))
-    ("c-flow-mapping" . ,(lambda ()
-                          (yaml--mapping-start-event t)))
-    ("c-flow-sequence" . ,(lambda ()
+  `((l-yaml-stream . ,(lambda ()
+                        (yaml--stream-start-event)
+                        (setq yaml--document-start-version nil)
+                        (setq yaml--document-start-explicit nil)
+                        (setq yaml--tag-map (make-hash-table))))
+    (c-flow-mapping . ,(lambda ()
+                         (yaml--mapping-start-event t)))
+    (c-flow-sequence . ,(lambda ()
+                          (yaml--sequence-start-event nil)))
+    (l+block-mapping . ,(lambda ()
+                          (yaml--mapping-start-event nil)))
+    (l+block-sequence . ,(lambda ()
                            (yaml--sequence-start-event nil)))
-    ("l+block-mapping" . ,(lambda ()
-                           (yaml--mapping-start-event nil)))
-    ("l+block-sequence" . ,(lambda ()
-                            (yaml--sequence-start-event nil)))
-    ("ns-l-compact-mapping" . ,(lambda ()
-                                (yaml--mapping-start-event nil)))
-    ("ns-l-compact-sequence" . ,(lambda ()
-                                 (yaml--sequence-start-event nil)))
-    ("ns-flow-pair" . ,(lambda ()
-                        (yaml--mapping-start-event t)))
-    ("ns-l-block-map-implicit-entry" . ,(lambda ()))
-    ("ns-l-compact-mapping" . ,(lambda ()))
-    ("c-l-block-seq-entry" . ,(lambda ())))
+    (ns-l-compact-mapping . ,(lambda ()
+                               (yaml--mapping-start-event nil)))
+    (ns-l-compact-sequence . ,(lambda ()
+                                (yaml--sequence-start-event nil)))
+    (ns-flow-pair . ,(lambda ()
+                       (yaml--mapping-start-event t)))
+    (ns-l-block-map-implicit-entry . ,(lambda () nil))
+    (ns-l-compact-mapping . ,(lambda () nil))
+    (c-l-block-seq-entry . ,(lambda () nil)))
   "List of functions for matched rules that run on the entering of a rule.")
 
 (defconst yaml--grammar-events-out
-  `(("c-b-block-header" .
+  `((c-b-block-header .
      ,(lambda (_text)
        nil))
-    ("l-yaml-stream" .
+    (l-yaml-stream .
      ,(lambda (_text)
        (yaml--check-document-end)
        (yaml--stream-end-event)))
-    ("ns-yaml-version" .
+    (ns-yaml-version .
      ,(lambda (text)
        (when yaml--document-start-version
          (throw 'error "Multiple %YAML directives not allowed."))
        (setq yaml--document-start-version text)))
-    ("c-tag-handle" .
+    (c-tag-handle .
      ,(lambda (text)
        (setq yaml--tag-handle text)))
-    ("ns-tag-prefix" .
+    (ns-tag-prefix .
      ,(lambda (text)
        (puthash yaml--tag-handle text yaml--tag-map)))
-    ("c-directives-end" .
+    (c-directives-end .
      ,(lambda (_text)
        (yaml--check-document-end)
        (setq yaml--document-start-explicit t)))
-    ("c-document-end" .
+    (c-document-end .
      ,(lambda (_text)
        (when (not yaml--document-end)
          (setq yaml--document-end-explicit t))
        (yaml--check-document-end)))
-    ("c-flow-mapping" .
+    (c-flow-mapping .
      ,(lambda (_text)
        (yaml--mapping-end-event)))
-    ("c-flow-sequence" .
+    (c-flow-sequence .
      ,(lambda (_text)
        (yaml--sequence-end-event )))
-    ("l+block-mapping" .
+    (l+block-mapping .
      ,(lambda (_text)
        (yaml--mapping-end-event)))
-    ("l+block-sequence" .
+    (l+block-sequence .
      ,(lambda (_text)
        (yaml--reverse-at-list)
        (yaml--sequence-end-event)))
-    ("ns-l-compact-mapping" .
+    (ns-l-compact-mapping .
      ,(lambda (_text)
        (yaml--mapping-end-event)))
-    ("ns-l-compact-sequence" .
+    (ns-l-compact-sequence .
      ,(lambda (_text)
        (yaml--sequence-end-event)))
-    ("ns-flow-pair" .
+    (ns-flow-pair .
      ,(lambda (_text)
        (yaml--mapping-end-event)))
-    ("ns-plain" .
+    (ns-plain .
      ,(lambda (text)
        (let* ((replaced (if (and (zerop (length yaml--state-stack))
                                  (string-match "\\(^\\|\n\\)\\.\\.\\.\\'" text))
@@ -577,7 +577,7 @@ reverse order."
                              " "))
                          replaced)))
          (yaml--scalar-event "plain" replaced))))
-    ("c-single-quoted" .
+    (c-single-quoted .
      ,(lambda (text)
        (let* ((replaced (replace-regexp-in-string
                          "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -601,7 +601,7 @@ reverse order."
                           replaced)))
          (yaml--scalar-event "single"
                              (substring replaced 1 (1- (length replaced)))))))
-    ("c-double-quoted" .
+    (c-double-quoted .
      ,(lambda (text)
        (let* ((replaced (replace-regexp-in-string
                          "\\(?:[ \t]*\r?\n[ \t]*\\)"
@@ -654,7 +654,7 @@ reverse order."
                          replaced))
               (replaced (substring replaced 1 (1- (length replaced)))))
          (yaml--scalar-event "double" replaced))))
-    ("c-l+literal" .
+    (c-l+literal .
      ,(lambda (text)
        (when (equal (car yaml--state-stack) :trail-comments)
          (pop yaml--state-stack)
@@ -663,7 +663,7 @@ reverse order."
                        (concat (regexp-quote comment-text) "\n*\\'") "" text))))
        (let* ((processed-text (yaml--process-literal-text text)))
          (yaml--scalar-event "folded" processed-text))))
-    ("c-l+folded" .
+    (c-l+folded .
      ,(lambda (text)
        (when (equal (car yaml--state-stack) :trail-comments)
          (pop yaml--state-stack)
@@ -672,30 +672,30 @@ reverse order."
                        (concat (regexp-quote comment-text) "\n*\\'") "" text))))
        (let* ((processed-text (yaml--process-folded-text text)))
          (yaml--scalar-event "folded" processed-text))))
-    ("e-scalar" .
+    (e-scalar .
      ,(lambda (_text)
        (yaml--scalar-event "plain" "null")))
-    ("c-ns-anchor-property" .
+    (c-ns-anchor-property .
      ,(lambda (text)
        (yaml--anchor-event (substring text 1))))
-    ("c-ns-tag-property" .
+    (c-ns-tag-property .
      ,(lambda (_text)
        ;; TODO: Implement tags
        ))
-    ("l-trail-comments" .
+    (l-trail-comments .
      ,(lambda (text)
        (yaml--trail-comments-event text)))
-    ("c-ns-alias-node" .
+    (c-ns-alias-node .
      ,(lambda (text)
        (yaml--alias-event (substring text 1)))))
   "List of functions for matched rules that run on the exiting of a rule.")
 
 (defconst yaml--terminal-rules
-  '( "l-nb-literal-text"
-     "l-nb-diff-lines"
-     "ns-plain"
-     "c-single-quoted"
-     "c-double-quoted")
+  '( l-nb-literal-text
+     l-nb-diff-lines
+     ns-plain
+     c-single-quoted
+     c-double-quoted)
   "List of rules that indicate at which the parse tree should stop.
 
 This addition is a hack to prevent the parse tree from going too deep and thus
@@ -706,11 +706,11 @@ repeat for each character in a text.")
   "Event walker iterates over the parse TREE and signals events from the rules."
   (when (consp tree)
     (if (stringp (car tree))
-        (let ((grammar-rule (car tree))
-              (text (cadr tree))
+        (let ((text (car tree))
+              (grammar-rule (cadr tree))
               (children (cl-caddr tree)))
-          (let ((in-fn (cdr (assoc grammar-rule yaml--grammar-events-in)))
-                (out-fn (cdr (assoc grammar-rule yaml--grammar-events-out))))
+          (let ((in-fn (cdr (assq grammar-rule yaml--grammar-events-in)))
+                (out-fn (cdr (assq grammar-rule yaml--grammar-events-out))))
             (when in-fn
               (funcall in-fn))
             (yaml--walk-events children)
@@ -945,8 +945,8 @@ This is currently unimplemented."
   (let ((res-sym (make-symbol "res")))
     `(let ((,res-sym ,value))
        (when ,res-sym
-         (,(cond ((equal "m" (symbol-name variable)) 'yaml--state-set-m)
-                 ((equal "t" (symbol-name variable)) 'yaml--state-set-t))
+         (,(cond ((eq 'm variable) 'yaml--state-set-m)
+                 ((eq 't variable) 'yaml--state-set-t))
           ,res-sym)
          ,res-sym))))
 
@@ -1095,20 +1095,19 @@ changes in the future."
   "Parse YAML grammar for given STATE and ARGS.
 
 Rules for this function are defined by the yaml-spec JSON file."
-  (let* ((name (symbol-name state))
-         (beg yaml--parsing-position)
+  (let* ((beg yaml--parsing-position)
          (_ (when (and yaml--parse-debug
-                       (not (member (symbol-name state) yaml--tracing-ignore)))
+                       (not (memq state yaml--tracing-ignore)))
               (message "|%s>%s %40s args=%s '%s'"
                        (make-string (length yaml--states) ?-)
                        (make-string (- 70 (length yaml--states)) ?\s)
-                       (symbol-name state)
+                       state
                        args
                        (replace-regexp-in-string
                         "\n"
                         "↓"
                         (yaml--slice yaml--parsing-position)))))
-         (_ (yaml--push-state (symbol-name state)))
+         (_ (yaml--push-state state))
          (yaml-n)
          (res
           (pcase state
@@ -2545,44 +2544,44 @@ Rules for this function are defined by the yaml-spec JSON file."
             (_ (error "Unknown parsing grammar state: %S %S" state args)))))
     (when (and yaml--parse-debug
                res
-               (not (member name yaml--tracing-ignore)))
+               (not (memq state yaml--tracing-ignore)))
       (message "<%s|%s %40s = '%s'"
                (make-string (length yaml--states) ?-)
                (make-string (- 70 (length yaml--states)) ?\s)
-               name
+               state
                (replace-regexp-in-string
                 "\n"
                 "↓"
                 (substring yaml--parsing-input beg yaml--parsing-position))))
     (yaml--pop-state)
     (if (not res)
-           nil
-         (let ((res-type (cdr (assoc name yaml--grammar-resolution-rules)))
-               (res (if (member name yaml--terminal-rules)
-                                ;; Ignore children if at-rule is
-                                ;; indicated to be terminal.
-                                t
-                              res)))
-           (cond
-            ((or (assoc name yaml--grammar-events-in)
-                 (assoc name yaml--grammar-events-out))
-             (let ((str (substring yaml--parsing-input beg yaml--parsing-position)))
-               (when yaml--parsing-store-position
-                 (setq str (propertize str 'yaml-position
-                                       (cons (1+ beg)
-                                             (1+ yaml--parsing-position)))))
-               (when (member name '("c-l+folded" "c-l+literal"))
-                 (setq str (propertize str 'yaml-n (max 0 yaml-n))))
-               (list name
-                     (if yaml--parsing-store-position
-                         (propertize str 'yaml-position (cons (1+ beg)
-                                                              (1+ yaml--parsing-position)))
-                       str)
-                     res)))
-            ((equal res-type 'list) (list name res))
-            ((equal res-type 'literal)
-             (substring yaml--parsing-input beg yaml--parsing-position))
-            (t res))))))
+        nil
+      (let ((res-type (cdr (assq state yaml--grammar-resolution-rules)))
+            (res (if (memq state yaml--terminal-rules)
+                     ;; Ignore children if at-rule is
+                     ;; indicated to be terminal.
+                     t
+                   res)))
+        (cond
+         ((or (assq state yaml--grammar-events-in)
+              (assq state yaml--grammar-events-out))
+          (let ((str (substring yaml--parsing-input beg yaml--parsing-position)))
+            (when yaml--parsing-store-position
+              (setq str (propertize str 'yaml-position
+                                    (cons (1+ beg)
+                                          (1+ yaml--parsing-position)))))
+            (when (memq state '(c-l+folded c-l+literal))
+              (setq str (propertize str 'yaml-n (max 0 yaml-n))))
+            (list (if yaml--parsing-store-position
+                      (propertize str 'yaml-position (cons (1+ beg)
+                                                           (1+ yaml--parsing-position)))
+                    str)
+                  state
+                  res)))
+         ((equal res-type 'list) (list state res))
+         ((equal res-type 'literal)
+          (substring yaml--parsing-input beg yaml--parsing-position))
+         (t res))))))
 
 ;;; Encoding
 
