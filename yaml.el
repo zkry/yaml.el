@@ -45,6 +45,9 @@
 
 (defconst yaml-parser-version "0.5.1")
 
+(defvar yaml--encode-use-flow-sequence t
+  "Turn on encoding sequence of scalars as flow sequence.")
+
 (defvar yaml--parse-debug nil
   "Turn on debugging messages when parsing YAML when non-nil.
 
@@ -2672,7 +2675,8 @@ auto-detecting the indentation"
            (yaml--encode-hash-table ht indent auto-indent))
           ((zerop (length l))
            (insert "[]"))
-          ((seq-every-p #'yaml--scalarp l)
+          ((and yaml--encode-use-flow-sequence
+                (seq-every-p #'yaml--scalarp l))
            (insert "[")
            (yaml--encode-object (car l) 0)
            (seq-do (lambda (object)
