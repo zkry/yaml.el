@@ -558,7 +558,12 @@ keep: |+
          (encoded-2 (yaml-encode o)))
     (equal encoded encoded-2)))
 
+
 (ert-deftest yaml-encode-tests ()
+  (should (equal (let* ((ht (make-hash-table :test #'equal)))
+                   (puthash 'input-files [] ht)
+                   (yaml-encode ht))
+                 "input-files: []"))
   (should (yaml-test-round-trip 1))
   (should (yaml-test-round-trip "one"))
   (should (yaml-test-round-trip nil))

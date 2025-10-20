@@ -2629,9 +2629,11 @@ without first inserting a newline."
 If AUTO-INDENT is non-nil, start the list on the current line,
 auto-detecting the indentation.  Functionality defers to
 `yaml--encode-list'."
-  (yaml--encode-list (seq-map #'identity a)
-                     indent
-                     auto-indent))
+  (if (equal a [])
+      (insert "[]")
+    (yaml--encode-list (seq-map #'identity a)
+                       indent
+                       auto-indent)))
 
 
 (defun yaml--encode-scalar (s)
