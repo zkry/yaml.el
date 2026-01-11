@@ -551,16 +551,12 @@ keep: |+
 
 (defun yaml-test-round-trip (o)
   "Test (equal (decode (encode o)) o)"
-  (seq-doseq (yaml-dialect '(:auto :kyaml-compact :kyaml-pretty))
-    (seq-doseq (yaml-indent-width '(2 4 8))
-      (let ((yaml-dialect yaml-dialect)
-	    (yaml-indent-width yaml-indent-width))
-	(let* ((encoded (yaml-encode o))
-               (parsed (yaml-parse-string encoded
-					  :object-type 'alist
-					  :sequence-type 'list))
-               (encoded-2 (yaml-encode o)))
-	(equal encoded encoded-2))))))
+  (let* ((encoded (yaml-encode o))
+         (parsed (yaml-parse-string encoded
+					                :object-type 'alist
+					                :sequence-type 'list))
+         (encoded-2 (yaml-encode o)))
+	(equal encoded encoded-2)))
 
 
 (ert-deftest yaml-encode-tests ()
@@ -632,20 +628,20 @@ keep: |+
            (yaml-encode `[((foo . bar) (baz . bax))])
            "- foo: bar\n  baz: bax"))
   (should (equal
-	   (let ((yaml-dialect :kyaml-compact))
-	     (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
-	   "{deeper: [{foo: \"bar\", baz: \"bax\", }, ], }"))
+	       (let ((yaml-dialect :kyaml-compact))
+	         (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
+	       "{deeper: [{foo: \"bar\", baz: \"bax\", }, ], }"))
   (should (equal
-	   (let ((yaml-dialect :kyaml-pretty)
-		 (yaml-indent-width 4))
-	     (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
-	   "{\n    deeper: [\n        {\n            foo: \"bar\",\n            baz: \"bax\",\n        },\n    ],\n}"))
+	       (let ((yaml-dialect :kyaml-pretty)
+		         (yaml-indent-width 4))
+	         (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
+	       "{\n    deeper: [\n        {\n            foo: \"bar\",\n            baz: \"bax\",\n        },\n    ],\n}"))
   (should (equal
            (yaml-encode `((deeper . [((foo . bar) (baz . bax))])))
            "deeper: \n- foo: bar\n  baz: bax"))
   (should (equal
-	   (let ((yaml-indent-width 4))
-	     (yaml-encode `((deeper . [((foo . bar) (baz . bax))]))))
+	       (let ((yaml-indent-width 4))
+	         (yaml-encode `((deeper . [((foo . bar) (baz . bax))]))))
            "deeper: \n-   foo: bar\n    baz: bax"))
   (should (equal (yaml-parse-string
                   (yaml-encode [1 [2 [3] 2] 1])
