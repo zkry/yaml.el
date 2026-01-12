@@ -630,12 +630,19 @@ keep: |+
   (should (equal
 	       (let ((yaml-encode-dialect :kyaml-compact))
 	         (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
-	       "{deeper: [{foo: \"bar\", baz: \"bax\", }, ], }"))
+	       "{deeper: [{foo: \"bar\", baz: \"bax\"}]}"))
   (should (equal
 	       (let ((yaml-encode-dialect :kyaml-pretty)
 		         (yaml-encode-indent-width 4))
 	         (yaml-encode `((deeper . [((foo . "bar") (baz . "bax"))]))))
-	       "{\n    deeper: [\n        {\n            foo: \"bar\",\n            baz: \"bax\",\n        },\n    ],\n}"))
+	       "{
+    deeper: [
+        {
+            foo: \"bar\",
+            baz: \"bax\"
+        }
+    ]
+}"))
   (should (equal
            (yaml-encode `((deeper . [((foo . bar) (baz . bax))])))
            "deeper: \n- foo: bar\n  baz: bax"))
